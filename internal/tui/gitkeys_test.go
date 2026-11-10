@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/flo8/go-diff/internal/git"
+	"github.com/flo8/go-diff/internal/syntax"
 )
 
 // enter presses Enter the way the terminal sends it.
@@ -192,7 +193,8 @@ func TestTextInput(t *testing.T) {
 }
 
 // Scenario: the test repository was never pushed, then is pushed.
-// Goal: before, every commit hash is pink (unpushed); after, yellow.
+// Goal: before, every commit hash is pink (unpushed); after, purple;
+// "current" stays pink.
 func TestUnpushedHashColor(t *testing.T) {
 	isolateGit(t)
 	m := newTestModel(t, true)
@@ -200,14 +202,17 @@ func TestUnpushedHashColor(t *testing.T) {
 	runGit(t, bare, "init", "-q", "--bare", "-b", "main")
 	runGit(t, m.repo.Root, "remote", "add", "origin", bare)
 
-	if m.hashColor(m.hist.commits[0]) != m.pal.RemovedFg {
+	if m.hashColor(1, m.hist.commits[0]) != m.pal.RemovedFg {
 		t.Errorf("a commit that was never pushed should be pink")
 	}
 
 	press(m, "P")
-	for _, c := range m.hist.commits {
-		if m.hashColor(c) != m.pal.ModifiedFg {
-			t.Errorf("%s should be yellow after the push", c.Short)
+	for i, c := range m.hist.commits {
+		if m.hashColor(i+1, c) != m.pal.Syntax[syntax.Type] {
+			t.Errorf("%s should be purple after the push", c.Short)
 		}
+	}
+	if m.hashColor(0, git.Commit{}) != m.pal.RemovedFg {
+		t.Errorf("current should stay pink")
 	}
 }

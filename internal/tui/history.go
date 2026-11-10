@@ -12,6 +12,7 @@ import (
 	"github.com/flo8/go-diff/internal/git"
 	"github.com/flo8/go-diff/internal/review"
 	"github.com/flo8/go-diff/internal/semantic"
+	"github.com/flo8/go-diff/internal/syntax"
 )
 
 const (
@@ -328,7 +329,7 @@ func (m *Model) historyRow(i int) string {
 	}
 
 	b.WriteString(m.pal.Style(m.pal.Header, bg, true).Render(marker))
-	b.WriteString(m.pal.Style(m.hashColor(c), bg, i == 0).Render(padRight(c.Short, hashColWidth)))
+	b.WriteString(m.pal.Style(m.hashColor(i, c), bg, i == 0).Render(padRight(c.Short, hashColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render(padRight(truncate(c.Date, dateColWidth-1), dateColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render(padRight(truncate(c.Author, authColWidth-1), authColWidth)))
 	b.WriteString(m.entryCounts(m.entrySet(i), bg))
@@ -337,13 +338,14 @@ func (m *Model) historyRow(i int) string {
 	return m.padLine(b.String(), bg, m.width)
 }
 
-// hashColor colors a hash like lazygit: pink for a commit that is not
-// pushed yet, yellow otherwise (and for "current").
-func (m *Model) hashColor(c git.Commit) color.Color {
-	if m.hist.unpushed[c.Hash] {
+// hashColor colors the hash of entry i: pink for "current" and for
+// commits not pushed yet, the theme's type color (purple in dark) for
+// pushed commits.
+func (m *Model) hashColor(i int, c git.Commit) color.Color {
+	if i == 0 || m.hist.unpushed[c.Hash] {
 		return m.pal.RemovedFg
 	}
-	return m.pal.ModifiedFg
+	return m.pal.Syntax[syntax.Type]
 }
 
 // entrySet returns the files of entry i, or nil while it is not loaded.
