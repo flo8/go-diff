@@ -20,7 +20,8 @@ const (
 	logLimit      = 1000                   // commits listed in the history
 	loadDelay     = 120 * time.Millisecond // wait for the cursor to stop before loading
 	maxCached     = 64                     // commits kept in memory
-	maxLoads      = 8                      // commits loading at the same time
+	maxHistory    = 12                     // most rows of the history panel, rule included
+	maxLoads      = maxHistory             // commits loading at the same time: a full panel
 	hashColWidth  = 9
 	dateColWidth  = 15
 	authColWidth  = 14
@@ -273,9 +274,9 @@ func (m *Model) historyKey(key string) tea.Cmd {
 }
 
 // historyHeight is the number of rows of the history panel, rule
-// included: a third of the screen, between 5 and 12 rows.
+// included: a third of the screen, between 5 and maxHistory rows.
 func (m *Model) historyHeight() int {
-	return min(max((m.height-2)/3, 5), 12)
+	return min(max((m.height-2)/3, 5), maxHistory)
 }
 
 // historyPanel draws the history in height lines: a rule with a title,

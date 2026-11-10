@@ -312,6 +312,19 @@ func TestLoadOrder(t *testing.T) {
 	}
 }
 
+// Scenario: a tall screen where the history panel shows its most rows.
+// Goal: every visible commit starts loading at once, none waits for a
+// free slot.
+func TestFullPanelLoadsAtOnce(t *testing.T) {
+	m := newTestModel(t, false)
+	m.hist.loading = map[string]bool{}
+	m.height = 100
+
+	if m.historyRows() > maxLoads {
+		t.Errorf("panel shows %d rows but only %d load at once", m.historyRows(), maxLoads)
+	}
+}
+
 // Scenario: the history rows before and after their commits load.
 // Goal: dots while unknown, then the same totals as the file table.
 func TestHistoryRowTotals(t *testing.T) {
