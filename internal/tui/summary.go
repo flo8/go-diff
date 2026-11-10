@@ -224,12 +224,12 @@ func (m *Model) tableTitles() string {
 	var b strings.Builder
 
 	b.WriteString("  ")
-	b.WriteString(padRight("Filename", m.nameColWidth()))
 	b.WriteString(padLeft("Removed", numColWidth))
 	b.WriteString(padLeft("Added", numColWidth))
 	b.WriteString(padLeft("Modified", numColWidth))
 	b.WriteString("  ")
 	b.WriteString(padRight("Details", detailsColWidth))
+	b.WriteString("Filename")
 
 	return m.pal.Style(m.pal.Muted, m.pal.Bg, true).Render(m.fit(b.String()))
 }
@@ -255,12 +255,14 @@ func (m *Model) fileRow(f *review.File, selected bool) string {
 
 	counts = countTexts(f)
 
+	// Counts first, then the kind of change, then the name, so the eye
+	// stays on the left side of the screen.
 	b.WriteString(m.pal.Style(m.pal.Header, bg, true).Render(marker))
-	b.WriteString(m.pal.Style(m.pal.Fg, bg, selected).Render(padRight(displayName(f.Change, m.nameColWidth()), m.nameColWidth())))
 	b.WriteString(m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(counts[0], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.AddedFg, bg, false).Render(padLeft(counts[1], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(counts[2], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render("  " + padRight(details(f, selected), detailsColWidth)))
+	b.WriteString(m.pal.Style(m.pal.Fg, bg, selected).Render(displayName(f.Change, m.nameColWidth())))
 
 	return m.padLine(b.String(), bg)
 }
@@ -294,10 +296,13 @@ func (m *Model) totalsRow() string {
 		label += fmt.Sprintf(" (%d hidden: only ignored changes)", m.list.hidden)
 	}
 
-	b.WriteString(m.pal.Style(m.pal.Fg, m.pal.Bg, true).Render("  " + padRight(label, m.nameColWidth())))
+	// Totals line up under the count columns; the label takes the
+	// details and filename columns.
+	b.WriteString(m.pal.Paint("  ", nil))
 	b.WriteString(m.pal.Style(m.pal.RemovedFg, m.pal.Bg, true).Render(padLeft(fmt.Sprint(total.Removed), numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.AddedFg, m.pal.Bg, true).Render(padLeft(fmt.Sprint(total.Added), numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.ModifiedFg, m.pal.Bg, true).Render(padLeft(fmt.Sprint(total.Modified), numColWidth)))
+	b.WriteString(m.pal.Style(m.pal.Fg, m.pal.Bg, true).Render("  " + label))
 
 	return m.fit(b.String())
 }
