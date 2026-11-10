@@ -17,7 +17,7 @@ import (
 const (
 	numColWidth     = 9
 	detailsColWidth = 14
-	tableChrome     = 4 // column titles, two rules, totals
+	tableChrome     = 2 // column titles and rule
 )
 
 // fileList is the state of a file table.
@@ -131,13 +131,19 @@ func (m *Model) openSelected(p *pane) {
 }
 
 // fileTable draws a file table in exactly height lines of width columns:
-// titles, a rule, the files, a rule and the totals. Without focus the
-// selected row is marked but not highlighted.
-func (m *Model) fileTable(s *changeSet, width, height int, focused bool) []string {
+// titles, a rule and the files, then a rule and the totals when
+// withTotals is set (the history panel shows them otherwise). Without
+// focus the selected row is marked but not highlighted.
+func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals bool) []string {
 	var lines []string
+	var footer int
 	var rows int
 
-	rows = max(height-tableChrome, 1)
+	footer = 0
+	if withTotals {
+		footer = 2
+	}
+	rows = max(height-2-footer, 1)
 	s.list.scroll(rows)
 
 	lines = append(lines, m.tableTitles(width))
@@ -152,13 +158,15 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused bool) []strin
 		lines = append(lines, m.pal.Paint("  No meaningful changes.", m.pal.Muted))
 	}
 
-	// Keep the totals at the bottom.
+	// Fill the space; the totals, if any, stay at the bottom.
 	for len(lines) < rows+2 {
 		lines = append(lines, "")
 	}
 
-	lines = append(lines, m.rule(width))
-	lines = append(lines, m.totalsRow(s, width))
+	if withTotals {
+		lines = append(lines, m.rule(width))
+		lines = append(lines, m.totalsRow(s, width))
+	}
 
 	return lines
 }
@@ -240,7 +248,7 @@ func (m *Model) totalsRow(s *changeSet, width int) string {
 
 	total = s.totals()
 
-	label = fmt.Sprintf("Total: %d files", len(s.list.visible))
+	label = "Total: " + fileCount(len(s.list.visible))
 	if s.list.hidden > 0 {
 		label += fmt.Sprintf(" (%d hidden: only ignored changes)", s.list.hidden)
 	}

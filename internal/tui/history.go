@@ -21,7 +21,8 @@ const (
 	hashColWidth  = 9
 	dateColWidth  = 15
 	authColWidth  = 14
-	countColWidth = 6 // removed, added and modified totals
+	countColWidth = 6  // removed, added and modified totals
+	filesColWidth = 10 // "12 files"
 )
 
 // history is the list under the file table. Entry 0 is "current", the
@@ -343,18 +344,20 @@ func (m *Model) entrySet(i int) *changeSet {
 	return m.hist.cache[m.hist.commits[i-1].Hash]
 }
 
-// entryCounts draws the removed, added and modified totals of an entry,
-// colored like the file table, or dots while they are not known yet.
+// entryCounts draws an entry's number of files and its removed, added
+// and modified totals, colored like the file table, or dots while they
+// are not known yet.
 func (m *Model) entryCounts(s *changeSet, bg color.Color) string {
 	var total diff.Counts
 
 	// Not loaded yet, or computed with other filters.
 	if s == nil || s.filters != m.filters {
-		return m.pal.Style(m.pal.Muted, bg, false).Render(strings.Repeat(padLeft("·", countColWidth), 3))
+		return m.pal.Style(m.pal.Muted, bg, false).Render(padLeft("·", filesColWidth) + strings.Repeat(padLeft("·", countColWidth), 3))
 	}
 
 	total = s.totals()
-	return m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(fmt.Sprint(total.Removed), countColWidth)) +
+	return m.pal.Style(m.pal.Muted, bg, false).Render(padLeft(fileCount(len(s.list.visible)), filesColWidth)) +
+		m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(fmt.Sprint(total.Removed), countColWidth)) +
 		m.pal.Style(m.pal.AddedFg, bg, false).Render(padLeft(fmt.Sprint(total.Added), countColWidth)) +
 		m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(fmt.Sprint(total.Modified), countColWidth))
 }
@@ -373,4 +376,12 @@ func (m *Model) titledRule(title string, width int) string {
 
 	head = "── " + title + " "
 	return m.pal.Paint(head, m.pal.Muted) + m.pal.Paint(strings.Repeat("─", max(width-len([]rune(head)), 0)), m.pal.Border)
+}
+
+// fileCount formats "1 file" or "12 files".
+func fileCount(n int) string {
+	if n == 1 {
+		return "1 file"
+	}
+	return fmt.Sprintf("%d files", n)
 }

@@ -289,7 +289,7 @@ func (m *Model) filesPanel(height int) []string {
 	commit, isCommit := m.hist.selectedCommit()
 	switch {
 	case m.files.set != nil:
-		return m.fileTable(m.files.set, m.width, height, m.focus == focusFiles)
+		return m.fileTable(m.files.set, m.width, height, m.focus == focusFiles, !m.showHistory)
 	case isCommit && m.hist.loadErr[commit.Hash] != nil:
 		lines = append(lines, m.pal.Paint("  "+m.hist.loadErr[commit.Hash].Error(), m.pal.RemovedFg))
 	default:

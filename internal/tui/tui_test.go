@@ -215,6 +215,22 @@ func TestToggleHistory(t *testing.T) {
 	}
 }
 
+// Scenario: the file table with and without the history panel.
+// Goal: the totals line is drawn only when the history (which shows the
+// totals in its rows) is hidden.
+func TestTotalsOnlyWithoutHistory(t *testing.T) {
+	m := newTestModel(t, true)
+
+	if strings.Contains(ansi.Strip(m.mainView()), "Total:") {
+		t.Errorf("totals line should be hidden while the history is shown")
+	}
+
+	press(m, "L")
+	if !strings.Contains(ansi.Strip(m.mainView()), "Total: 1 file") {
+		t.Errorf("totals line should be shown when the history is hidden")
+	}
+}
+
 // Scenario: nothing loaded yet, the cursor on the second commit.
 // Goal: the selected commit is loaded first; with "current" selected,
 // the first visible commit is; a stale tick starts nothing.
@@ -257,7 +273,7 @@ func TestHistoryRowTotals(t *testing.T) {
 		t.Errorf("current totals = %+v, want 1 modified", got)
 	}
 	row := ansi.Strip(m.historyRow(2))
-	if !strings.Contains(row, "     0     0     1  change a") {
+	if !strings.Contains(row, "    1 file     0     0     1  change a") {
 		t.Errorf("row = %q", row)
 	}
 }
