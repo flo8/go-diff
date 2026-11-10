@@ -56,15 +56,17 @@ type Model struct {
 	help          bool
 
 	// Changing the repository: see gitkeys.go and job.go.
-	rangeOpts   git.Options
-	canStage    bool // "current" is HEAD → working tree
-	status      git.WorkStatus
-	job         *job          // running commit, pull or push
-	jobSeq      int           // ids of jobs and results
-	result      *result       // outcome of the last action
-	input       *textInput    // commit message being typed
-	filterKey   bool          // F was pressed: the next key picks a filter
-	resultDelay time.Duration // how long a success stays; 0 until the next key
+	rangeOpts    git.Options
+	canStage     bool // "current" is HEAD → working tree
+	status       git.WorkStatus
+	job          *job          // running commit, pull or push
+	jobSeq       int           // ids of jobs and results
+	result       *result       // outcome of the last action
+	input        *textInput    // commit message being typed
+	filterKey    bool          // F was pressed: the next key picks a filter
+	resultDelay  time.Duration // how long a success stays; 0 until the next key
+	refreshing   bool          // a refresh is running
+	refreshEvery time.Duration // time between automatic refreshes; 0 for none
 
 	width  int
 	height int
@@ -84,6 +86,7 @@ func New(opt Options) *Model {
 		rangeOpts:     opt.RangeOpts,
 		canStage:      isWorktreeRange(opt.RangeOpts),
 		resultDelay:   resultDelay,
+		refreshEvery:  autoRefreshDelay,
 	}
 
 	m.themeIdx = themeIndex(m.themes, opt.Theme)
@@ -114,10 +117,13 @@ func isWorktreeRange(o git.Options) bool {
 // Init asks the terminal for its background color, to choose between
 // the dark and light themes when none was configured.
 func (m *Model) Init() tea.Cmd {
+	var cmds []tea.Cmd
+
 	if m.autoTheme {
-		return tea.RequestBackgroundColor
+		cmds = append(cmds, tea.RequestBackgroundColor)
 	}
-	return nil
+	cmds = append(cmds, m.nextAutoRefresh())
+	return tea.Batch(cmds...)
 }
 
 // Update handles one event.
@@ -145,6 +151,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.finishEditorCommit(msg)
 	case refreshed:
 		return m, m.applyRefresh(msg)
+	case autoRefreshTick:
+		return m, m.autoRefresh()
 	case spinTick:
 		return m, m.spinNext(msg)
 	case clearResult:

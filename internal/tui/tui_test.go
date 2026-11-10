@@ -82,6 +82,7 @@ func newTestModel(t *testing.T, prefetch bool) *Model {
 		Filters: semantic.DefaultFilters, Themes: theme.Builtins(), Theme: "dark",
 	})
 	m.resultDelay = 0
+	m.refreshEvery = 0 // tests send autoRefreshTick themselves
 	_, cmd := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	if prefetch {
 		run(m, cmd)

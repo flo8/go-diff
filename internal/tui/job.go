@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	spinDelay   = 80 * time.Millisecond // time between spinner frames
-	resultDelay = 4 * time.Second       // a success stays this long on screen
-	barWidth    = 16
+	spinDelay        = 80 * time.Millisecond // time between spinner frames
+	resultDelay      = 4 * time.Second       // a success stays this long on screen
+	autoRefreshDelay = 5 * time.Second       // time between automatic refreshes
+	barWidth         = 16
 )
 
 // spinFrames are drawn one after the other while git runs.

@@ -103,6 +103,11 @@ other rows on screen. Rows show `·` until their totals are known.
 The panel's title shows the branch, its upstream, and how many commits
 it is ahead (`↑`) and behind (`↓`) as of the last fetch.
 
+Every 5 seconds godiff reads the working tree, the status and the
+history again, so changes made outside it (an edit, a commit or fetch
+from the shell) show up on their own. It waits while a file is open in
+the diff viewer or a commit message is being typed.
+
 ## Commit, pull, push
 
 | Key | Action |

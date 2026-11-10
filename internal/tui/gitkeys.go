@@ -202,6 +202,24 @@ func (m *Model) toggleStageSelected() error {
 	return m.repo.Stage(paths)
 }
 
+// keepSelection selects in the new list the file that was selected in
+// the old one, if it is still there, and keeps the scroll position.
+func keepSelection(old, new *fileList) {
+	var path string
+
+	if old.selected >= len(old.visible) {
+		return
+	}
+	path = old.visible[old.selected].Change.Path()
+
+	for i, f := range new.visible {
+		if f.Change.Path() == path {
+			new.selected = i
+		}
+	}
+	new.top = old.top
+}
+
 // changePaths returns the old and new paths of a change, without
 // duplicates or empty ones.
 func changePaths(c git.Change) []string {
@@ -242,7 +260,37 @@ type refreshed struct {
 // refresh returns a Bubble Tea command that reads "current", the
 // history and the status again, off the main loop.
 func (m *Model) refresh() tea.Cmd {
+	m.refreshing = true
 	return refreshJob{repo: m.repo, opts: m.rangeOpts, filters: m.filters}.run
+}
+
+// autoRefreshTick fires every refreshEvery to pick up changes made
+// outside godiff: edited files, commits from the shell, a fetch.
+type autoRefreshTick struct{}
+
+func (autoRefreshTick) msg(time.Time) tea.Msg {
+	return autoRefreshTick{}
+}
+
+// nextAutoRefresh schedules the next automatic refresh, if any.
+func (m *Model) nextAutoRefresh() tea.Cmd {
+	if m.repo == nil || m.refreshEvery == 0 {
+		return nil
+	}
+	return tea.Tick(m.refreshEvery, autoRefreshTick{}.msg)
+}
+
+// autoRefresh reloads the repository state unless it would get in the
+// way: while a file is open (its lines would change under the reader),
+// a commit message is typed, or a git command or refresh runs.
+func (m *Model) autoRefresh() tea.Cmd {
+	var busy bool
+
+	busy = m.files.viewer != nil || m.input != nil || m.job != nil || m.refreshing
+	if busy || m.repo == nil {
+		return m.nextAutoRefresh()
+	}
+	return tea.Batch(m.refresh(), m.nextAutoRefresh())
 }
 
 // refreshJob holds what refresh needs, copied so that the background
@@ -288,6 +336,7 @@ func (m *Model) applyRefresh(msg refreshed) tea.Cmd {
 	var commit git.Commit
 	var isCommit bool
 
+	m.refreshing = false
 	if msg.err != nil {
 		m.showError(msg.err.Error())
 		return nil
@@ -295,6 +344,7 @@ func (m *Model) applyRefresh(msg refreshed) tea.Cmd {
 
 	commit, isCommit = m.hist.selectedCommit()
 	m.applySort(msg.set)
+	keepSelection(&m.current.list, &msg.set.list)
 	m.current = msg.set
 	m.hist.commits = msg.commits
 	m.hist.unpushed = msg.unpushed

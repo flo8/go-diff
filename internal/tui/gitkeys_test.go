@@ -297,3 +297,31 @@ func TestCurrentColorWhenClean(t *testing.T) {
 		t.Errorf("current without changes should be grey")
 	}
 }
+
+// Scenario: while godiff runs, a new file c.go is written from outside,
+// with b.go selected; then the same while a file is open in the viewer.
+// Goal: the automatic refresh shows c.go, still with b.go selected; with
+// the viewer open it does nothing.
+func TestAutoRefresh(t *testing.T) {
+	m := newTestModel(t, true)
+	os.WriteFile(filepath.Join(m.repo.Root, "c.go"), []byte("package a\n\nvar c = 1\nvar d = 2\nvar e = 3\n"), 0o644)
+
+	send(m, autoRefreshTick{})
+	if got := strings.Join(selectedPaths(m), " "); got != "c.go b.go" {
+		t.Fatalf("files = %s, want c.go b.go", got)
+	}
+	if path := m.current.list.visible[m.current.list.selected].Change.Path(); path != "b.go" {
+		t.Errorf("selected %s, want b.go kept", path)
+	}
+	if m.status.Untracked != 1 {
+		t.Errorf("untracked = %d, want 1", m.status.Untracked)
+	}
+
+	// With a file open, the refresh waits.
+	press(m, "enter")
+	os.WriteFile(filepath.Join(m.repo.Root, "d.go"), []byte("package a\n"), 0o644)
+	send(m, autoRefreshTick{})
+	if m.files.viewer == nil || m.status.Untracked != 1 {
+		t.Errorf("refresh should wait while a file is open")
+	}
+}
