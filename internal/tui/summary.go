@@ -25,6 +25,8 @@ type fileList struct {
 	visible       []*review.File // files with meaningful changes, sorted
 	hidden        int            // files changed only in ignored ways
 	sortByChanges bool
+	grouped       bool            // go, tests, other: see groups.go
+	groupFiles    [groupCount]int // number of visible files in each group
 	selected      int
 	top           int // first visible row when the list scrolls
 }
@@ -47,6 +49,12 @@ func (l *fileList) refresh(files []*review.File) {
 	l.hidden = len(files) - len(l.visible)
 	l.sort()
 
+	// Count the files of each group for the separator lines.
+	l.groupFiles = [groupCount]int{}
+	for _, f := range l.visible {
+		l.groupFiles[groupOf(f.Change.Path())]++
+	}
+
 	// Find the previously selected file again.
 	l.selected = 0
 	for i, f := range l.visible {
@@ -56,13 +64,29 @@ func (l *fileList) refresh(files []*review.File) {
 	}
 }
 
-// sort orders by path, or by number of changes (most first).
+// sort orders by path, or by number of changes (most first); when
+// grouped, by group first.
 func (l *fileList) sort() {
-	if l.sortByChanges {
-		sort.SliceStable(l.visible, l.byChanges)
-		return
+	sort.SliceStable(l.visible, l.less)
+}
+
+func (l *fileList) less(i, j int) bool {
+	var gi fileGroup
+	var gj fileGroup
+
+	// Groups come first, in their order.
+	if l.grouped {
+		gi = groupOf(l.visible[i].Change.Path())
+		gj = groupOf(l.visible[j].Change.Path())
+		if gi != gj {
+			return gi < gj
+		}
 	}
-	sort.SliceStable(l.visible, l.byPath)
+
+	if l.sortByChanges {
+		return l.byChanges(i, j)
+	}
+	return l.byPath(i, j)
 }
 
 func (l *fileList) byPath(i, j int) bool {
@@ -117,6 +141,9 @@ func (m *Model) fileListKey(p *pane, key string) {
 	case "o":
 		m.sortByChanges = !m.sortByChanges
 		m.applySort(p.set)
+	case "O":
+		m.groupByKind = !m.groupByKind
+		m.applySort(p.set)
 	case "enter", "l", "right":
 		m.openSelected(p)
 	}
@@ -139,6 +166,8 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 	var footer int
 	var rows int
 	var staging bool
+	var f *review.File
+	var g fileGroup
 
 	staging = s == m.current && m.canStage && m.repo != nil
 	footer = 0
@@ -146,13 +175,29 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 		footer = 2
 	}
 	rows = max(height-2-footer, 1)
-	s.list.scroll(rows)
+
+	// Separators take rows too: keep room for one per group so the
+	// selected file always stays on screen.
+	if s.list.grouped {
+		s.list.scroll(max(rows-int(groupCount), 1))
+	} else {
+		s.list.scroll(rows)
+	}
 
 	lines = append(lines, m.tableTitles(width, staging))
 	lines = append(lines, m.rule(width))
 
-	for i := s.list.top; i < len(s.list.visible) && i < s.list.top+rows; i++ {
-		lines = append(lines, m.fileRow(s.list.visible[i], staging, i == s.list.selected, focused, width))
+	for i := s.list.top; i < len(s.list.visible) && len(lines) < rows+2; i++ {
+		f = s.list.visible[i]
+
+		// A grouped table names each group above its first file.
+		if s.list.grouped && s.list.startsGroup(i) {
+			g = groupOf(f.Change.Path())
+			lines = append(lines, m.groupSeparator(g, s.list.groupFiles[g], width))
+		}
+		if len(lines) < rows+2 {
+			lines = append(lines, m.fileRow(f, staging, i == s.list.selected, focused, width))
+		}
 	}
 
 	// An empty list says why.

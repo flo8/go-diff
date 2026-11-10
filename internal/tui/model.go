@@ -53,6 +53,7 @@ type Model struct {
 	focus         focusArea
 	showHistory   bool
 	sortByChanges bool // file tables sort by changed lines, else by name
+	groupByKind   bool // file tables group go, tests and other files
 	help          bool
 
 	// Changing the repository: see gitkeys.go and job.go.
@@ -437,6 +438,7 @@ func (m *Model) mainFooter() string {
 	}
 	hints = append(hints, [][2]string{
 		{"c", "commit"}, {"p/P", "pull/push"}, {"o", "sort: " + m.sortName()},
+		{"O", "group: " + onOff(m.groupByKind)},
 		{"tab", "history"}, historyKey, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
 	}...)
 	return m.keyHints(hints)
@@ -450,14 +452,23 @@ func (m *Model) sortName() string {
 	return "name"
 }
 
-// applySort sorts a file table the way all of them are sorted, when it
-// is shown. Each loaded commit keeps its own table, so it may have been
-// sorted before o was pressed.
+// onOff names the state of a switch.
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
+}
+
+// applySort sorts and groups a file table the way all of them are, when
+// it is shown. Each loaded commit keeps its own table, so it may have
+// been sorted before o or O was pressed.
 func (m *Model) applySort(s *changeSet) {
-	if s.list.sortByChanges == m.sortByChanges {
+	if s.list.sortByChanges == m.sortByChanges && s.list.grouped == m.groupByKind {
 		return
 	}
 	s.list.sortByChanges = m.sortByChanges
+	s.list.grouped = m.groupByKind
 	s.list.refresh(s.files)
 }
 
