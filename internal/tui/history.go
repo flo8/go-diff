@@ -30,8 +30,9 @@ const (
 // changes); entry i > 0 is commits[i-1], compared with its parent.
 type history struct {
 	commits  []git.Commit
-	err      error // reading the history failed
-	selected int   // entry index
+	unpushed map[string]bool // hashes of commits not pushed yet
+	err      error           // reading the history failed
+	selected int             // entry index
 	top      int
 
 	cache   map[string]*changeSet // loaded commits by hash
@@ -327,13 +328,22 @@ func (m *Model) historyRow(i int) string {
 	}
 
 	b.WriteString(m.pal.Style(m.pal.Header, bg, true).Render(marker))
-	b.WriteString(m.pal.Style(m.pal.ModifiedFg, bg, i == 0).Render(padRight(c.Short, hashColWidth)))
+	b.WriteString(m.pal.Style(m.hashColor(c), bg, i == 0).Render(padRight(c.Short, hashColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render(padRight(truncate(c.Date, dateColWidth-1), dateColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render(padRight(truncate(c.Author, authColWidth-1), authColWidth)))
 	b.WriteString(m.entryCounts(m.entrySet(i), bg))
 	b.WriteString(m.pal.Style(m.pal.Fg, bg, focused).Render("  " + c.Subject))
 
 	return m.padLine(b.String(), bg, m.width)
+}
+
+// hashColor colors a hash like lazygit: pink for a commit that is not
+// pushed yet, yellow otherwise (and for "current").
+func (m *Model) hashColor(c git.Commit) color.Color {
+	if m.hist.unpushed[c.Hash] {
+		return m.pal.RemovedFg
+	}
+	return m.pal.ModifiedFg
 }
 
 // entrySet returns the files of entry i, or nil while it is not loaded.

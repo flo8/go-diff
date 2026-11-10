@@ -69,3 +69,34 @@ func parseLog(out string) ([]Commit, error) {
 
 	return commits, nil
 }
+
+// Unpushed returns the hashes of the commits on HEAD that are not pushed:
+// not on the upstream, or, without one, not on any remote branch.
+// Without commits the set is empty.
+func (r *Repo) Unpushed(upstream string) (map[string]bool, error) {
+	var args []string
+	var out []byte
+	var hashes map[string]bool
+	var err error
+
+	hashes = map[string]bool{}
+	if !r.hasHead() {
+		return hashes, nil
+	}
+
+	// Without upstream, compare with every remote branch.
+	args = []string{"rev-list", "HEAD", "--not", "--remotes"}
+	if upstream != "" {
+		args = []string{"rev-list", "HEAD", "--not", upstream}
+	}
+
+	out, err = r.run(args...)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, hash := range strings.Fields(string(out)) {
+		hashes[hash] = true
+	}
+	return hashes, nil
+}

@@ -232,10 +232,11 @@ func (m *Model) reloadStatus() {
 // refreshed carries the repository state read again after a commit,
 // pull or push.
 type refreshed struct {
-	set     *changeSet
-	commits []git.Commit
-	status  git.WorkStatus
-	err     error
+	set      *changeSet
+	commits  []git.Commit
+	unpushed map[string]bool
+	status   git.WorkStatus
+	err      error
 }
 
 // refresh returns a Bubble Tea command that reads "current", the
@@ -273,6 +274,10 @@ func (j refreshJob) run() tea.Msg {
 		return msg
 	}
 	msg.status, msg.err = j.repo.Status()
+	if msg.err != nil {
+		return msg
+	}
+	msg.unpushed, msg.err = j.repo.Unpushed(msg.status.Upstream)
 	return msg
 }
 
@@ -293,6 +298,7 @@ func (m *Model) applyRefresh(msg refreshed) tea.Cmd {
 	msg.set.list.refresh(msg.set.files)
 	m.current = msg.set
 	m.hist.commits = msg.commits
+	m.hist.unpushed = msg.unpushed
 	m.status = msg.status
 
 	m.hist.selected = 0

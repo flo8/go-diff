@@ -94,6 +94,7 @@ func New(opt Options) *Model {
 	if m.repo != nil {
 		m.hist.commits, m.hist.err = m.repo.Log(logLimit)
 		m.status, _ = m.repo.Status()
+		m.hist.unpushed, _ = m.repo.Unpushed(m.status.Upstream)
 	}
 
 	return m

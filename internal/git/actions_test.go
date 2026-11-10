@@ -262,6 +262,10 @@ func TestPush(t *testing.T) {
 	if st = mustStatus(t, repo); st.Ahead != 1 {
 		t.Errorf("ahead = %d, want 1", st.Ahead)
 	}
+	head := gitIn(t, dir, "rev-parse", "HEAD")
+	if unpushed, _ := repo.Unpushed(st.Upstream); len(unpushed) != 1 || !unpushed[head] {
+		t.Errorf("unpushed = %v, want only %s", unpushed, head)
+	}
 
 	lines := make(chan string, 100)
 	if _, err := repo.Push(st, lines); err != nil {
@@ -324,5 +328,20 @@ func TestPullPushPreconditions(t *testing.T) {
 	gitIn(t, dir, "checkout", "-q", "--detach")
 	if _, err := repo.Push(mustStatus(t, repo), nil); err == nil || !strings.Contains(err.Error(), "detached") {
 		t.Errorf("push err = %v", err)
+	}
+}
+
+// Scenario: a branch that was never pushed, in a repository with a remote.
+// Goal: without upstream, every commit not on a remote branch is unpushed.
+func TestUnpushedWithoutUpstream(t *testing.T) {
+	repo, dir := newRepo(t)
+	withRemote(t, dir)
+
+	unpushed, err := repo.Unpushed("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpushed) != 1 || !unpushed[gitIn(t, dir, "rev-parse", "HEAD")] {
+		t.Errorf("unpushed = %v, want the one commit", unpushed)
 	}
 }

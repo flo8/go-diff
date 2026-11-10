@@ -190,3 +190,24 @@ func TestTextInput(t *testing.T) {
 		t.Errorf("enter should submit")
 	}
 }
+
+// Scenario: the test repository was never pushed, then is pushed.
+// Goal: before, every commit hash is pink (unpushed); after, yellow.
+func TestUnpushedHashColor(t *testing.T) {
+	isolateGit(t)
+	m := newTestModel(t, true)
+	bare := t.TempDir()
+	runGit(t, bare, "init", "-q", "--bare", "-b", "main")
+	runGit(t, m.repo.Root, "remote", "add", "origin", bare)
+
+	if m.hashColor(m.hist.commits[0]) != m.pal.RemovedFg {
+		t.Errorf("a commit that was never pushed should be pink")
+	}
+
+	press(m, "P")
+	for _, c := range m.hist.commits {
+		if m.hashColor(c) != m.pal.ModifiedFg {
+			t.Errorf("%s should be yellow after the push", c.Short)
+		}
+	}
+}
