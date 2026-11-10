@@ -21,6 +21,7 @@ type WorkStatus struct {
 	Upstream string           // "origin/main", or "" when there is none
 	Ahead    int              // commits on the branch, not on the upstream
 	Behind   int              // commits on the upstream, not on the branch
+	Stashes  int              // entries in the stash
 	Files    map[string]Stage // by path; files without changes are absent
 }
 
@@ -32,7 +33,7 @@ func (r *Repo) Status() (WorkStatus, error) {
 	var st WorkStatus
 	var err error
 
-	out, err = r.run("status", "--porcelain=v2", "--branch", "--untracked-files=all", "-z")
+	out, err = r.run("status", "--porcelain=v2", "--branch", "--show-stash", "--untracked-files=all", "-z")
 	if err != nil {
 		return st, err
 	}
@@ -57,6 +58,7 @@ func (r *Repo) Status() (WorkStatus, error) {
 //	# branch.head main
 //	# branch.upstream origin/main
 //	# branch.ab +1 -2
+//	# stash 3
 //	1 XY sub mH mI mW hH hI path
 //	2 XY sub mH mI mW hH hI score path
 //	u XY sub m1 m2 m3 mW h1 h2 h3 path
@@ -78,6 +80,8 @@ func parseStatusLine(line string, st *WorkStatus) {
 		fields = strings.Fields(line)
 		st.Ahead, _ = strconv.Atoi(strings.TrimPrefix(fields[2], "+"))
 		st.Behind, _ = strconv.Atoi(strings.TrimPrefix(fields[3], "-"))
+	case strings.HasPrefix(line, "# stash "):
+		st.Stashes, _ = strconv.Atoi(strings.TrimPrefix(line, "# stash "))
 	case strings.HasPrefix(line, "1 "):
 		fields = strings.SplitN(line, " ", 9)
 		st.Files[fields[8]] = stageOf(fields[1])

@@ -144,6 +144,19 @@ func TestHeaderBranch(t *testing.T) {
 	}
 }
 
+// Scenario: stash the change to b.go.
+// Goal: the header shows one stash next to the branch.
+func TestHeaderStashes(t *testing.T) {
+	isolateGit(t)
+	m := newTestModel(t, true)
+
+	runGit(t, m.repo.Root, "stash", "-q")
+	m.reloadStatus()
+	if !strings.Contains(ansi.Strip(m.headerLine("x")), " godiff  main ≡1 ") {
+		t.Errorf("header should show 1 stash: %q", ansi.Strip(m.headerLine("x")))
+	}
+}
+
 // Scenario: pull with no upstream.
 // Goal: the error shows in the footer and goes away on the next key.
 func TestPullErrorClearsOnKey(t *testing.T) {

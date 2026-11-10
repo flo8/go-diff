@@ -116,6 +116,23 @@ func TestStatusStages(t *testing.T) {
 	if st.Branch != "main" || st.Upstream != "" {
 		t.Errorf("branch %q upstream %q", st.Branch, st.Upstream)
 	}
+	if st.Stashes != 0 {
+		t.Errorf("stashes = %d, want 0", st.Stashes)
+	}
+}
+
+// Scenario: stash a change twice.
+// Goal: Status counts 2 stashes.
+func TestStatusStashes(t *testing.T) {
+	repo, dir := newRepo(t)
+	writeFile(t, dir, "a.txt", "two\n")
+	gitIn(t, dir, "stash", "-q")
+	writeFile(t, dir, "a.txt", "three\n")
+	gitIn(t, dir, "stash", "-q")
+
+	if st := mustStatus(t, repo); st.Stashes != 2 {
+		t.Errorf("stashes = %d, want 2", st.Stashes)
+	}
 }
 
 // Scenario: stage and unstage one file, then everything.
