@@ -238,11 +238,7 @@ func (m *Model) totalsRow(s *changeSet, width int) string {
 	var label string
 	var b strings.Builder
 
-	for _, f := range s.list.visible {
-		total.Removed += f.Counts.Removed
-		total.Added += f.Counts.Added
-		total.Modified += f.Counts.Modified
-	}
+	total = s.totals()
 
 	label = fmt.Sprintf("Total: %d files", len(s.list.visible))
 	if s.list.hidden > 0 {

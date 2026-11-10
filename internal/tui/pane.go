@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/flo8/go-diff/internal/diff"
 	"github.com/flo8/go-diff/internal/review"
 	"github.com/flo8/go-diff/internal/semantic"
 )
@@ -38,6 +39,19 @@ func (s *changeSet) recompute(f semantic.Filters) {
 	review.ComputeAll(s.files, f)
 	s.filters = f
 	s.list.refresh(s.files)
+}
+
+// totals sums the counts of the files shown in the table.
+func (s *changeSet) totals() diff.Counts {
+	var total diff.Counts
+
+	for _, f := range s.list.visible {
+		total.Removed += f.Counts.Removed
+		total.Added += f.Counts.Added
+		total.Modified += f.Counts.Modified
+	}
+
+	return total
 }
 
 // baseName and targetName split the range description "A → B".

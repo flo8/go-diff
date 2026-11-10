@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/flo8/go-diff/internal/git"
 	"github.com/flo8/go-diff/internal/review"
@@ -47,7 +48,10 @@ func commitFile(t *testing.T, dir, name, content, message string) {
 //	"change a"   a.go: 1 line modified
 //	"add b"      b.go created
 //	working tree: b.go has one unstaged modified line
-func newTestModel(t *testing.T) *Model {
+//
+// With prefetch, the history rows are loaded the way the app does at
+// startup; without, nothing is loaded yet.
+func newTestModel(t *testing.T, prefetch bool) *Model {
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-q", "-b", "main")
 	commitFile(t, dir, "a.go", "package a\n\nvar x = 1\n", "add a")
@@ -76,7 +80,10 @@ func newTestModel(t *testing.T) *Model {
 		Repo: repo, Files: files, Range: rg.String(),
 		Filters: semantic.DefaultFilters, Themes: theme.Builtins(), Theme: "dark",
 	})
-	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	_, cmd := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	if prefetch {
+		run(m, cmd)
+	}
 	return m
 }
 
@@ -109,7 +116,7 @@ func selectedPaths(m *Model) []string {
 // Goal: the history lists "current" then the three commits, "current"
 // is selected, and the file table shows the working tree change.
 func TestStartsOnCurrent(t *testing.T) {
-	m := newTestModel(t)
+	m := newTestModel(t, true)
 
 	if m.hist.entries() != 4 || m.hist.selected != 0 {
 		t.Fatalf("entries=%d selected=%d, want 4 entries with current selected", m.hist.entries(), m.hist.selected)
@@ -131,7 +138,7 @@ func TestStartsOnCurrent(t *testing.T) {
 // Goal: each commit shows its own files and counts; back on "current"
 // the working tree change shows again.
 func TestHistoryShowsEachCommitsFiles(t *testing.T) {
-	m := newTestModel(t)
+	m := newTestModel(t, true)
 
 	press(m, "tab")
 	if m.focus != focusHistory {
@@ -161,7 +168,7 @@ func TestHistoryShowsEachCommitsFiles(t *testing.T) {
 // Goal: Esc returns to the split with the same commit selected and the
 // file table focused.
 func TestOpenFileFromCommit(t *testing.T) {
-	m := newTestModel(t)
+	m := newTestModel(t, true)
 
 	press(m, "tab")
 	press(m, "down")
@@ -191,7 +198,7 @@ func TestOpenFileFromCommit(t *testing.T) {
 // Goal: hiding moves the focus to the files; tab shows it again and
 // focuses it.
 func TestToggleHistory(t *testing.T) {
-	m := newTestModel(t)
+	m := newTestModel(t, true)
 
 	press(m, "tab")
 	press(m, "L")
@@ -208,33 +215,57 @@ func TestToggleHistory(t *testing.T) {
 	}
 }
 
-// Scenario: move quickly through two commits.
-// Goal: only the commit the cursor stops on is loaded; the stale tick
-// is dropped.
-func TestLoadOnlyWhereTheCursorStops(t *testing.T) {
-	m := newTestModel(t)
-	press(m, "tab")
+// Scenario: nothing loaded yet, the cursor on the second commit.
+// Goal: the selected commit is loaded first; with "current" selected,
+// the first visible commit is; a stale tick starts nothing.
+func TestLoadOrder(t *testing.T) {
+	m := newTestModel(t, false)
+	m.hist.loading = "" // the startup load was not run
 
-	// Move twice without running the tick commands, then run the first
-	// (stale) tick and the last one.
-	first := m.historyKey("down")
-	last := m.historyKey("down")
-
-	run(m, first)
-	if m.hist.loading != "" || len(m.hist.cache) != 0 {
-		t.Errorf("stale tick started a load: loading=%q cached=%d", m.hist.loading, len(m.hist.cache))
+	m.hist.selected = 2
+	if got := m.wantedCommit(); got != m.hist.commits[1].Hash {
+		t.Errorf("wanted %q, want the selected commit %q", got, m.hist.commits[1].Hash)
 	}
 
-	run(m, last)
-	if p := selectedPaths(m); len(p) != 1 || p[0] != "a.go" || len(m.hist.cache) != 1 {
-		t.Errorf("change a should be loaded alone: %v cached=%d", p, len(m.hist.cache))
+	m.hist.selected = 0
+	if got := m.wantedCommit(); got != m.hist.commits[0].Hash {
+		t.Errorf("wanted %q, want the first visible commit", got)
+	}
+
+	m.hist.seq = 5
+	if cmd := m.startLoad(loadTick{seq: 4}); cmd != nil {
+		t.Errorf("stale tick should not start a load")
+	}
+}
+
+// Scenario: the history rows before and after their commits load.
+// Goal: dots while unknown, then the same totals as the file table.
+func TestHistoryRowTotals(t *testing.T) {
+	m := newTestModel(t, false)
+	if row := ansi.Strip(m.historyRow(2)); !strings.Contains(row, "·") {
+		t.Errorf("unloaded row should show dots: %q", row)
+	}
+
+	m = newTestModel(t, true)
+	if len(m.hist.cache) != 3 {
+		t.Fatalf("startup should load the 3 visible commits, got %d", len(m.hist.cache))
+	}
+	if got := m.entrySet(2).totals(); got.Modified != 1 || got.Added != 0 || got.Removed != 0 {
+		t.Errorf("change a totals = %+v, want 1 modified", got)
+	}
+	if got := m.entrySet(0).totals(); got.Modified != 1 {
+		t.Errorf("current totals = %+v, want 1 modified", got)
+	}
+	row := ansi.Strip(m.historyRow(2))
+	if !strings.Contains(row, "     0     0     1  change a") {
+		t.Errorf("row = %q", row)
 	}
 }
 
 // Scenario: toggle the comment filter while a commit is shown.
 // Goal: the shown commit and "current" are recomputed.
 func TestFilterToggleRecomputesShown(t *testing.T) {
-	m := newTestModel(t)
+	m := newTestModel(t, true)
 	press(m, "tab")
 	press(m, "down")
 

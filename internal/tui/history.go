@@ -1,24 +1,27 @@
 package tui
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/flo8/go-diff/internal/diff"
 	"github.com/flo8/go-diff/internal/git"
 	"github.com/flo8/go-diff/internal/review"
 	"github.com/flo8/go-diff/internal/semantic"
 )
 
 const (
-	logLimit     = 1000                   // commits listed in the history
-	loadDelay    = 120 * time.Millisecond // wait for the cursor to stop before loading
-	maxCached    = 64                     // commits kept in memory
-	hashColWidth = 9
-	dateColWidth = 15
-	authColWidth = 14
+	logLimit      = 1000                   // commits listed in the history
+	loadDelay     = 120 * time.Millisecond // wait for the cursor to stop before loading
+	maxCached     = 64                     // commits kept in memory
+	hashColWidth  = 9
+	dateColWidth  = 15
+	authColWidth  = 14
+	countColWidth = 6 // removed, added and modified totals
 )
 
 // history is the list under the file table. Entry 0 is "current", the
@@ -95,13 +98,14 @@ func (j loadJob) run() tea.Msg {
 
 // selectEntry moves the history selection to entry i and shows its files:
 // "current" and cached commits right away, other commits after a short
-// delay so that scrolling through the list does not load every commit.
+// delay so that holding a key down does not start a load for each row.
 func (m *Model) selectEntry(i int) tea.Cmd {
 	var commit git.Commit
 	var isCommit bool
 	var set *changeSet
 
 	m.hist.selected = min(max(i, 0), m.hist.entries()-1)
+	m.scrollHistory(m.historyRows())
 	commit, isCommit = m.hist.selectedCommit()
 
 	set = m.current
@@ -109,35 +113,76 @@ func (m *Model) selectEntry(i int) tea.Cmd {
 		set = m.hist.cache[commit.Hash]
 	}
 
+	// Shown right away; rows that scrolled into view may need loading.
 	m.files = pane{set: set}
 	if set != nil {
 		set.recompute(m.filters)
-		return nil
+		return m.nextLoad()
 	}
 
 	m.hist.seq++
 	return tea.Tick(loadDelay, loadTick{seq: m.hist.seq}.msg)
 }
 
-// startLoad begins loading the selected commit, unless the selection
-// moved since the tick was scheduled or the commit is already there.
+// startLoad runs when the cursor stopped on an unloaded commit, unless
+// it moved again since.
 func (m *Model) startLoad(t loadTick) tea.Cmd {
-	var commit git.Commit
-	var isCommit bool
-
-	commit, isCommit = m.hist.selectedCommit()
-	if t.seq != m.hist.seq || !isCommit {
+	if t.seq != m.hist.seq {
 		return nil
 	}
-	if m.hist.cache[commit.Hash] != nil || m.hist.loading == commit.Hash {
-		return nil
-	}
-
-	m.hist.loading = commit.Hash
-	return loadJob{repo: m.repo, hash: commit.Hash, filters: m.filters}.run
+	return m.nextLoad()
 }
 
-// finishLoad stores a loaded commit and shows it if it is still selected.
+// nextLoad starts loading one commit, if none is loading: the selected
+// commit first, then the visible rows from the top, so that every row
+// on screen gets its counts. Loads run one at a time.
+func (m *Model) nextLoad() tea.Cmd {
+	var hash string
+
+	if m.hist.loading != "" || m.repo == nil {
+		return nil
+	}
+
+	hash = m.wantedCommit()
+	if hash == "" {
+		return nil
+	}
+
+	m.hist.loading = hash
+	return loadJob{repo: m.repo, hash: hash, filters: m.filters}.run
+}
+
+// wantedCommit returns the next commit to load, or "" when every
+// visible commit is loaded (or failed).
+func (m *Model) wantedCommit() string {
+	var candidates []string
+
+	commit, isCommit := m.hist.selectedCommit()
+	if isCommit {
+		candidates = append(candidates, commit.Hash)
+	}
+	candidates = append(candidates, m.visibleCommits()...)
+
+	for _, hash := range candidates {
+		if m.hist.cache[hash] == nil && m.hist.loadErr[hash] == nil {
+			return hash
+		}
+	}
+	return ""
+}
+
+// visibleCommits returns the hashes of the commits on screen.
+func (m *Model) visibleCommits() []string {
+	var hashes []string
+
+	for i := max(m.hist.top, 1); i < m.hist.entries() && i < m.hist.top+m.historyRows(); i++ {
+		hashes = append(hashes, m.hist.commits[i-1].Hash)
+	}
+	return hashes
+}
+
+// finishLoad stores a loaded commit, shows it if it is selected, and
+// starts the next load.
 func (m *Model) finishLoad(msg commitLoaded) tea.Cmd {
 	var commit git.Commit
 	var isCommit bool
@@ -146,24 +191,46 @@ func (m *Model) finishLoad(msg commitLoaded) tea.Cmd {
 
 	if msg.err != nil {
 		m.hist.loadErr[msg.hash] = msg.err
-		return nil
+		return m.nextLoad()
 	}
 
-	// Keep memory bounded: forget everything when the cache is full.
 	if len(m.hist.cache) >= maxCached {
-		m.hist.cache = map[string]*changeSet{}
+		m.evictHidden()
 	}
 	m.hist.cache[msg.hash] = msg.set
+	msg.set.recompute(m.filters)
 
-	// The selection may have moved on while this commit was loading.
 	commit, isCommit = m.hist.selectedCommit()
-	if !isCommit || commit.Hash != msg.hash {
-		return m.selectEntry(m.hist.selected)
+	if isCommit && commit.Hash == msg.hash {
+		m.files.set = msg.set
 	}
 
-	msg.set.recompute(m.filters)
-	m.files.set = msg.set
-	return nil
+	return m.nextLoad()
+}
+
+// evictHidden keeps memory bounded: it forgets every cached commit that
+// is neither visible nor selected.
+func (m *Model) evictHidden() {
+	var keep map[string]*changeSet
+
+	keep = map[string]*changeSet{}
+	for _, hash := range m.visibleCommits() {
+		if set := m.hist.cache[hash]; set != nil {
+			keep[hash] = set
+		}
+	}
+
+	commit, isCommit := m.hist.selectedCommit()
+	if set := m.hist.cache[commit.Hash]; isCommit && set != nil {
+		keep[commit.Hash] = set
+	}
+
+	m.hist.cache = keep
+}
+
+// historyRows is the number of entries the history panel shows.
+func (m *Model) historyRows() int {
+	return max(m.historyHeight()-1, 1)
 }
 
 // historyKey moves through the history when it has the focus.
@@ -262,9 +329,34 @@ func (m *Model) historyRow(i int) string {
 	b.WriteString(m.pal.Style(m.pal.ModifiedFg, bg, i == 0).Render(padRight(c.Short, hashColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render(padRight(truncate(c.Date, dateColWidth-1), dateColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render(padRight(truncate(c.Author, authColWidth-1), authColWidth)))
-	b.WriteString(m.pal.Style(m.pal.Fg, bg, focused).Render(c.Subject))
+	b.WriteString(m.entryCounts(m.entrySet(i), bg))
+	b.WriteString(m.pal.Style(m.pal.Fg, bg, focused).Render("  " + c.Subject))
 
 	return m.padLine(b.String(), bg, m.width)
+}
+
+// entrySet returns the files of entry i, or nil while it is not loaded.
+func (m *Model) entrySet(i int) *changeSet {
+	if i == 0 {
+		return m.current
+	}
+	return m.hist.cache[m.hist.commits[i-1].Hash]
+}
+
+// entryCounts draws the removed, added and modified totals of an entry,
+// colored like the file table, or dots while they are not known yet.
+func (m *Model) entryCounts(s *changeSet, bg color.Color) string {
+	var total diff.Counts
+
+	// Not loaded yet, or computed with other filters.
+	if s == nil || s.filters != m.filters {
+		return m.pal.Style(m.pal.Muted, bg, false).Render(strings.Repeat(padLeft("·", countColWidth), 3))
+	}
+
+	total = s.totals()
+	return m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(fmt.Sprint(total.Removed), countColWidth)) +
+		m.pal.Style(m.pal.AddedFg, bg, false).Render(padLeft(fmt.Sprint(total.Added), countColWidth)) +
+		m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(fmt.Sprint(total.Modified), countColWidth))
 }
 
 // currentSubject describes the "current" entry.

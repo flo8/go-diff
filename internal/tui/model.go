@@ -97,6 +97,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+		// The size decides which history rows are visible: load their counts.
+		return m, m.nextLoad()
 	case tea.BackgroundColorMsg:
 		if m.autoTheme && !msg.IsDark() {
 			m.setTheme(themeIndex(m.themes, "light"))
@@ -197,8 +200,14 @@ func (m *Model) toggleFilter(key string) {
 		m.filters.Imports = !m.filters.Imports
 	}
 
-	// "current" is always shown in the history row, keep it up to date.
+	// The history rows on screen show totals: keep them up to date.
+	// Commits off screen are recomputed when they come into view.
 	m.current.recompute(m.filters)
+	for _, hash := range m.visibleCommits() {
+		if set := m.hist.cache[hash]; set != nil {
+			set.recompute(m.filters)
+		}
+	}
 
 	if m.files.set != nil {
 		m.files.set.recompute(m.filters)

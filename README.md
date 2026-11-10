@@ -92,7 +92,10 @@ shows its files, compared with its parent, in the table above.
 | `tab` | move between the file table and the history |
 | `L` | show / hide the history panel |
 
-A commit's files load in the background once the cursor stops on it.
+Each row shows the commit's removed, added and modified totals, with the
+same filters as the file table. Commits load in the background, one at a
+time: the selected commit first, then the other rows on screen. Rows show
+`·` until their totals are known.
 
 ## Keys
 
