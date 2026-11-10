@@ -110,6 +110,9 @@ func TestStatusStages(t *testing.T) {
 			t.Errorf("%s: stage %d, want %d", path, st.Files[path], stage)
 		}
 	}
+	if st.StagedFiles() != 3 {
+		t.Errorf("staged files = %d, want 3 (a, b, e)", st.StagedFiles())
+	}
 	if len(st.Files) != len(want) {
 		t.Errorf("files = %v, want %d entries", st.Files, len(want))
 	}

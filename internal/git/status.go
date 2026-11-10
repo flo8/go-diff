@@ -125,6 +125,18 @@ func (st WorkStatus) HasStaged() bool {
 	return false
 }
 
+// StagedFiles counts the files with a staged change, fully or partly.
+func (st WorkStatus) StagedFiles() int {
+	var n int
+
+	for _, s := range st.Files {
+		if s != Unstaged {
+			n++
+		}
+	}
+	return n
+}
+
 // HasUnstaged reports whether any file has an unstaged change.
 func (st WorkStatus) HasUnstaged() bool {
 	for _, s := range st.Files {

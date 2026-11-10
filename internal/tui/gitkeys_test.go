@@ -159,6 +159,18 @@ func TestHeaderStashes(t *testing.T) {
 	}
 }
 
+// Scenario: stage b.go, the only changed file.
+// Goal: the header shows 1 staged file next to the branch.
+func TestHeaderStaged(t *testing.T) {
+	isolateGit(t)
+	m := newTestModel(t, true)
+
+	press(m, "space")
+	if !strings.Contains(ansi.Strip(m.headerLine("x")), " godiff  main ●1 ") {
+		t.Errorf("header should show 1 staged: %q", ansi.Strip(m.headerLine("x")))
+	}
+}
+
 // Scenario: add two files git does not track.
 // Goal: the header shows 2 untracked files next to the branch.
 func TestHeaderUntracked(t *testing.T) {

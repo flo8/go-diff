@@ -457,32 +457,49 @@ func (m *Model) headerLine(title string) string {
 	return m.spread(left, badges)
 }
 
-// branchBadge shows the branch in mint, then the commits ahead of its
-// upstream (pink, like unpushed hashes) and behind it (yellow), the
-// number of stashes and of untracked files (muted), when there are any. It shows "detached" when HEAD is not on a branch, and
-// nothing outside a repository.
+// headerCount is one count next to the branch, like "↑2".
+type headerCount struct {
+	n      int
+	symbol string
+	fg     color.Color
+}
+
+// branchBadge shows the branch in mint, then its counts, each only when
+// it is not zero:
+//
+//	↑2  commits not pushed (pink, like unpushed hashes)
+//	↓1  commits on the upstream not pulled yet (yellow)
+//	●3  staged files (mint, like the staging mark)
+//	?4  untracked files
+//	≡1  stashes
+//
+// It shows "detached" when HEAD is not on a branch, and nothing outside
+// a repository.
 func (m *Model) branchBadge() string {
+	var st = m.status
 	var badge string
+	var counts []headerCount
 
 	if m.repo == nil {
 		return ""
 	}
-	if m.status.Branch == "" {
+	if st.Branch == "" {
 		return m.pal.Paint(" detached ", m.pal.Muted)
 	}
 
-	badge = m.pal.Style(m.pal.AddedFg, m.pal.Bg, true).Render(" " + m.status.Branch)
-	if m.status.Ahead > 0 {
-		badge += m.pal.Paint(fmt.Sprintf(" ↑%d", m.status.Ahead), m.pal.RemovedFg)
+	counts = []headerCount{
+		{st.Ahead, "↑", m.pal.RemovedFg},
+		{st.Behind, "↓", m.pal.ModifiedFg},
+		{st.StagedFiles(), "●", m.pal.AddedFg},
+		{st.Untracked, "?", m.pal.Muted},
+		{st.Stashes, "≡", m.pal.Muted},
 	}
-	if m.status.Behind > 0 {
-		badge += m.pal.Paint(fmt.Sprintf(" ↓%d", m.status.Behind), m.pal.ModifiedFg)
-	}
-	if m.status.Stashes > 0 {
-		badge += m.pal.Paint(fmt.Sprintf(" ≡%d", m.status.Stashes), m.pal.Muted)
-	}
-	if m.status.Untracked > 0 {
-		badge += m.pal.Paint(fmt.Sprintf(" ?%d", m.status.Untracked), m.pal.Muted)
+
+	badge = m.pal.Style(m.pal.AddedFg, m.pal.Bg, true).Render(" " + st.Branch)
+	for _, c := range counts {
+		if c.n > 0 {
+			badge += m.pal.Paint(fmt.Sprintf(" %s%d", c.symbol, c.n), c.fg)
+		}
 	}
 	return badge + m.pal.Paint(" ", nil)
 }
