@@ -437,13 +437,14 @@ func (m *Model) sortName() string {
 	return "name"
 }
 
-// headerLine shows the app name and a title on the left and the filter
-// switches on the right.
+// headerLine shows the app name, the branch and a title on the left and
+// the filter switches on the right.
 func (m *Model) headerLine(title string) string {
 	var left string
 	var badges string
 
 	left = m.pal.Style(m.pal.Header, m.pal.Bg, true).Render(" godiff ") +
+		m.branchBadge() +
 		m.pal.Paint(" "+title, m.pal.Fg)
 
 	// Drop the filter names when the line is too narrow for them.
@@ -453,6 +454,18 @@ func (m *Model) headerLine(title string) string {
 	}
 
 	return m.spread(left, badges)
+}
+
+// branchBadge shows the branch in mint, "detached" when HEAD is not on
+// a branch, or nothing outside a repository.
+func (m *Model) branchBadge() string {
+	if m.repo == nil {
+		return ""
+	}
+	if m.status.Branch == "" {
+		return m.pal.Paint(" detached ", m.pal.Muted)
+	}
+	return m.pal.Style(m.pal.AddedFg, m.pal.Bg, true).Render(" " + m.status.Branch + " ")
 }
 
 // filterBadges shows each filter's key and whether it is on, as

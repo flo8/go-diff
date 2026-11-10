@@ -120,6 +120,21 @@ func TestPushSetsUpstream(t *testing.T) {
 	}
 }
 
+// Scenario: the test repository is on main, then on a detached HEAD.
+// Goal: the header names the branch, then says "detached".
+func TestHeaderBranch(t *testing.T) {
+	m := newTestModel(t, true)
+	if !strings.Contains(ansi.Strip(m.mainView()), " godiff  main  HEAD → working tree") {
+		t.Errorf("header should name the branch: %q", ansi.Strip(m.headerLine("x")))
+	}
+
+	runGit(t, m.repo.Root, "checkout", "-q", "--detach")
+	m.reloadStatus()
+	if !strings.Contains(ansi.Strip(m.headerLine("x")), " detached ") {
+		t.Errorf("header should say detached: %q", ansi.Strip(m.headerLine("x")))
+	}
+}
+
 // Scenario: pull with no upstream.
 // Goal: the error shows in the footer and goes away on the next key.
 func TestPullErrorClearsOnKey(t *testing.T) {
@@ -193,8 +208,8 @@ func TestTextInput(t *testing.T) {
 }
 
 // Scenario: the test repository was never pushed, then is pushed.
-// Goal: before, every commit hash is pink (unpushed); after, purple;
-// "current" stays pink.
+// Goal: before, every commit hash is pink (unpushed); after, purple.
+// "current" is pink while b.go has changes.
 func TestUnpushedHashColor(t *testing.T) {
 	isolateGit(t)
 	m := newTestModel(t, true)
@@ -213,6 +228,22 @@ func TestUnpushedHashColor(t *testing.T) {
 		}
 	}
 	if m.hashColor(0, git.Commit{}) != m.pal.RemovedFg {
-		t.Errorf("current should stay pink")
+		t.Errorf("current with changes should be pink")
+	}
+}
+
+// Scenario: commit every change, so the working tree is clean.
+// Goal: "current" turns from pink to purple.
+func TestCurrentColorWhenClean(t *testing.T) {
+	isolateGit(t)
+	m := newTestModel(t, true)
+
+	press(m, "a")
+	press(m, "c")
+	send(m, tea.PasteMsg{Content: "update b"})
+	enter(m)
+
+	if m.hashColor(0, git.Commit{}) != m.pal.Syntax[syntax.Type] {
+		t.Errorf("current without changes should be purple")
 	}
 }
