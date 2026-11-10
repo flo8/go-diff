@@ -340,17 +340,16 @@ func (m *Model) historyRow(i int) string {
 
 // hashColor colors the hash of entry i: pink for work not pushed yet
 // ("current" with changes, unpushed commits), the theme's type color
-// (purple in dark) otherwise. "current" counts files whose changes are
+// (purple in dark) for pushed commits, and grey for "current" when
+// there is nothing to commit. "current" counts files whose changes are
 // all ignored by the filters too: they are still uncommitted.
 func (m *Model) hashColor(i int, c git.Commit) color.Color {
-	var pending bool
-
-	pending = m.hist.unpushed[c.Hash]
-	if i == 0 {
-		pending = len(m.current.files) > 0
-	}
-
-	if pending {
+	switch {
+	case i == 0 && len(m.current.files) > 0:
+		return m.pal.RemovedFg
+	case i == 0:
+		return m.pal.Muted
+	case m.hist.unpushed[c.Hash]:
 		return m.pal.RemovedFg
 	}
 	return m.pal.Syntax[syntax.Type]

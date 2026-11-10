@@ -283,7 +283,7 @@ func TestUnpushedHashColor(t *testing.T) {
 }
 
 // Scenario: commit every change, so the working tree is clean.
-// Goal: "current" turns from pink to purple.
+// Goal: "current" turns from pink to grey.
 func TestCurrentColorWhenClean(t *testing.T) {
 	isolateGit(t)
 	m := newTestModel(t, true)
@@ -293,7 +293,7 @@ func TestCurrentColorWhenClean(t *testing.T) {
 	send(m, tea.PasteMsg{Content: "update b"})
 	enter(m)
 
-	if m.hashColor(0, git.Commit{}) != m.pal.Syntax[syntax.Type] {
-		t.Errorf("current without changes should be purple")
+	if m.hashColor(0, git.Commit{}) != m.pal.Muted {
+		t.Errorf("current without changes should be grey")
 	}
 }
