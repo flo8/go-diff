@@ -1,5 +1,5 @@
-// Package tui is the interactive interface: the changes tab, the log
-// tab, the diff viewer and the help screen.
+// Package tui is the interactive interface: the file table with the
+// history panel under it, the diff viewer and the help screen.
 package tui
 
 import (
@@ -16,10 +16,12 @@ import (
 	"github.com/flo8/go-diff/internal/theme"
 )
 
-// Tabs, switched with "1", "2" and "tab".
+// focusArea is the panel that receives the arrow keys.
+type focusArea int
+
 const (
-	tabChanges = iota
-	tabLog
+	focusFiles focusArea = iota
+	focusHistory
 )
 
 // Options configure a new Model.
@@ -42,10 +44,12 @@ type Model struct {
 	autoTheme bool
 	pal       *render.Palette
 
-	tab     int
-	changes pane     // the comparison given on the command line
-	log     logState // the commit history
-	help    bool
+	current     *changeSet // the comparison given on the command line
+	hist        history
+	files       pane // the selected history entry's files and open viewer
+	focus       focusArea
+	showHistory bool
+	help        bool
 
 	width  int
 	height int
@@ -56,15 +60,24 @@ func New(opt Options) *Model {
 	var m *Model
 
 	m = &Model{
-		repo:      opt.Repo,
-		filters:   opt.Filters,
-		themes:    opt.Themes,
-		autoTheme: opt.Theme == "",
+		repo:        opt.Repo,
+		filters:     opt.Filters,
+		themes:      opt.Themes,
+		autoTheme:   opt.Theme == "",
+		showHistory: true,
 	}
 
 	m.themeIdx = themeIndex(m.themes, opt.Theme)
 	m.pal = render.NewPalette(m.themes[m.themeIdx])
-	m.changes.set = newChangeSet(opt.Files, opt.Range, opt.Filters)
+
+	// "current" is selected first; commits load when selected.
+	m.current = newChangeSet(opt.Files, opt.Range, opt.Filters)
+	m.files = pane{set: m.current}
+	m.hist.cache = map[string]*changeSet{}
+	m.hist.loadErr = map[string]error{}
+	if m.repo != nil {
+		m.hist.commits, m.hist.err = m.repo.Log(logLimit)
+	}
 
 	return m
 }
@@ -99,7 +112,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleKey runs the keys that work everywhere, then the screen's own.
+// handleKey runs the keys that work everywhere, then the panel's own.
 func (m *Model) handleKey(key string) tea.Cmd {
 
 	// Any key closes the help screen.
@@ -121,12 +134,10 @@ func (m *Model) handleKey(key string) tea.Cmd {
 		m.setTheme((m.themeIdx + 1) % len(m.themes))
 	case "c", "w", "f", "i":
 		m.toggleFilter(key)
-	case "1":
-		return m.switchTab(tabChanges)
-	case "2":
-		return m.switchTab(tabLog)
 	case "tab":
-		return m.switchTab(1 - m.tab)
+		m.toggleFocus()
+	case "L":
+		m.toggleHistory()
 	default:
 		return m.screenKey(key)
 	}
@@ -134,36 +145,39 @@ func (m *Model) handleKey(key string) tea.Cmd {
 	return nil
 }
 
-// switchTab shows a tab where it was left. The log is read the first
-// time it is shown.
-func (m *Model) switchTab(tab int) tea.Cmd {
-	m.tab = tab
-	if tab == tabLog {
-		return m.openLog()
+// toggleFocus moves the focus between the file table and the history,
+// showing the history if it was hidden. It does nothing in the viewer.
+func (m *Model) toggleFocus() {
+	if m.files.viewer != nil {
+		return
 	}
-	return nil
+
+	if m.focus == focusHistory {
+		m.focus = focusFiles
+		return
+	}
+
+	m.showHistory = true
+	m.focus = focusHistory
 }
 
-// activePane is the file table and viewer of the current tab.
-func (m *Model) activePane() *pane {
-	if m.tab == tabLog {
-		return &m.log.files
+// toggleHistory shows or hides the history panel.
+func (m *Model) toggleHistory() {
+	m.showHistory = !m.showHistory
+	if !m.showHistory {
+		m.focus = focusFiles
 	}
-	return &m.changes
 }
 
-// screenKey sends a key to the open viewer, or to the tab.
+// screenKey sends a key to the open viewer or the focused panel.
 func (m *Model) screenKey(key string) tea.Cmd {
-	var p *pane
-
-	p = m.activePane()
 	switch {
-	case p.viewer != nil:
-		m.viewerKey(p, key)
-	case m.tab == tabLog:
-		return m.logKey(key)
-	default:
-		m.fileListKey(p, key)
+	case m.files.viewer != nil:
+		m.viewerKey(&m.files, key)
+	case m.focus == focusHistory:
+		return m.historyKey(key)
+	case m.files.set != nil:
+		m.fileListKey(&m.files, key)
 	}
 
 	return nil
@@ -183,19 +197,14 @@ func (m *Model) toggleFilter(key string) {
 		m.filters.Imports = !m.filters.Imports
 	}
 
-	m.refreshPane(&m.changes)
-	m.refreshPane(&m.log.files)
-}
+	// "current" is always shown in the history row, keep it up to date.
+	m.current.recompute(m.filters)
 
-// refreshPane recomputes a pane's files; an open file keeps its place.
-func (m *Model) refreshPane(p *pane) {
-	if p.set == nil {
-		return
+	if m.files.set != nil {
+		m.files.set.recompute(m.filters)
 	}
-
-	p.set.recompute(m.filters)
-	if p.viewer != nil {
-		p.viewer.reload(m.height)
+	if m.files.viewer != nil {
+		m.files.viewer.reload(m.height)
 	}
 }
 
@@ -208,21 +217,17 @@ func (m *Model) setTheme(i int) {
 // View draws the current screen.
 func (m *Model) View() tea.View {
 	var content string
-	var p *pane
 	var v tea.View
 
-	p = m.activePane()
 	switch {
 	case m.width == 0 || m.height == 0:
 		content = ""
 	case m.help:
 		content = m.helpView()
-	case p.viewer != nil:
-		content = m.viewerView(p)
-	case m.tab == tabLog:
-		content = m.logView()
+	case m.files.viewer != nil:
+		content = m.viewerView(&m.files)
 	default:
-		content = m.changesView()
+		content = m.mainView()
 	}
 
 	v = tea.NewView(content)
@@ -237,14 +242,95 @@ func (m *Model) View() tea.View {
 	return v
 }
 
-// headerLine shows the app name, the tabs and a title on the left and
-// the filter switches on the right.
+// mainView draws the header, the file table, the history panel (when
+// shown) and the footer.
+func (m *Model) mainView() string {
+	var tableHeight int
+	var lines []string
+
+	tableHeight = m.height - 2
+	if m.showHistory {
+		tableHeight -= m.historyHeight()
+	}
+
+	lines = append(lines, m.headerLine(m.selectedTitle()))
+	lines = append(lines, m.filesPanel(max(tableHeight, 1))...)
+	if m.showHistory {
+		lines = append(lines, m.historyPanel(m.historyHeight())...)
+	}
+	lines = append(lines, m.mainFooter())
+
+	return strings.Join(lines, "\n")
+}
+
+// selectedTitle names the selected history entry in the header.
+func (m *Model) selectedTitle() string {
+	commit, isCommit := m.hist.selectedCommit()
+	if !isCommit {
+		return m.current.rangeName
+	}
+	return commit.Short + " " + commit.Subject
+}
+
+// filesPanel draws the selected entry's file table in height lines, or
+// why there is none yet.
+func (m *Model) filesPanel(height int) []string {
+	var lines []string
+
+	commit, isCommit := m.hist.selectedCommit()
+	switch {
+	case m.files.set != nil:
+		return m.fileTable(m.files.set, m.width, height, m.focus == focusFiles)
+	case isCommit && m.hist.loadErr[commit.Hash] != nil:
+		lines = append(lines, m.pal.Paint("  "+m.hist.loadErr[commit.Hash].Error(), m.pal.RemovedFg))
+	default:
+		lines = append(lines, m.pal.Paint("  Loading…", m.pal.Muted))
+	}
+
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+// mainFooter lists the keys of the focused panel.
+func (m *Model) mainFooter() string {
+	var historyKey [2]string
+
+	historyKey = [2]string{"L", "hide history"}
+	if !m.showHistory {
+		historyKey = [2]string{"L", "show history"}
+	}
+
+	if m.focus == focusHistory {
+		return m.keyHints([][2]string{
+			{"↑↓", "select entry"}, {"⏎/tab", "files"},
+			historyKey, {"?", "help"}, {"q", "quit"},
+		})
+	}
+
+	return m.keyHints([][2]string{
+		{"↑↓", "select file"}, {"⏎", "open"}, {"o", "sort: " + m.sortName()},
+		{"tab", "history"}, historyKey, {"t", "theme: " + m.pal.Theme.Name}, {"?", "help"}, {"q", "quit"},
+	})
+}
+
+// sortName names the sort order of the shown file table.
+func (m *Model) sortName() string {
+	if m.files.set != nil && m.files.set.list.sortByChanges {
+		return "changes"
+	}
+	return "name"
+}
+
+// headerLine shows the app name and a title on the left and the filter
+// switches on the right.
 func (m *Model) headerLine(title string) string {
 	var left string
 	var badges string
 
 	left = m.pal.Style(m.pal.Header, m.pal.Bg, true).Render(" godiff ") +
-		m.tabLabels() + m.pal.Paint("  "+title, m.pal.Fg)
+		m.pal.Paint(" "+title, m.pal.Fg)
 
 	// Drop the filter names when the line is too narrow for them.
 	badges = m.filterBadges(false) + " "
@@ -253,18 +339,6 @@ func (m *Model) headerLine(title string) string {
 	}
 
 	return m.spread(left, badges)
-}
-
-// tabLabels draws "1 Changes  2 Log" with the current tab highlighted.
-func (m *Model) tabLabels() string {
-	return m.tabLabel("1 Changes", m.tab == tabChanges) + m.tabLabel("2 Log", m.tab == tabLog)
-}
-
-func (m *Model) tabLabel(text string, active bool) string {
-	if active {
-		return m.pal.Style(m.pal.Header, m.pal.Selection, true).Render(" " + text + " ")
-	}
-	return m.pal.Paint(" "+text+" ", m.pal.Muted)
 }
 
 // filterBadges shows each filter's key and whether it is on, as

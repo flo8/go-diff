@@ -130,17 +130,6 @@ func (m *Model) openSelected(p *pane) {
 	p.viewer = newViewer(p.set.list.visible[p.set.list.selected], m.height)
 }
 
-// changesView draws the changes tab: header, file table, footer.
-func (m *Model) changesView() string {
-	var lines []string
-
-	lines = append(lines, m.headerLine(m.changes.set.rangeName))
-	lines = append(lines, m.fileTable(m.changes.set, m.width, m.height-2, true)...)
-	lines = append(lines, m.changesFooter())
-
-	return strings.Join(lines, "\n")
-}
-
 // fileTable draws a file table in exactly height lines of width columns:
 // titles, a rule, the files, a rule and the totals. Without focus the
 // selected row is marked but not highlighted.
@@ -269,22 +258,6 @@ func (m *Model) totalsRow(s *changeSet, width int) string {
 	b.WriteString(m.pal.Style(m.pal.Fg, m.pal.Bg, true).Render("  " + label))
 
 	return padTo(b.String(), width)
-}
-
-// changesFooter lists the main keys of the changes tab.
-func (m *Model) changesFooter() string {
-	return m.keyHints([][2]string{
-		{"↑↓", "select"}, {"⏎", "open"}, {"o", "sort: " + sortName(m.changes.set.list)},
-		{"tab", "log"}, {"t", "theme: " + m.pal.Theme.Name}, {"?", "help"}, {"q", "quit"},
-	})
-}
-
-// sortName names the current sort order.
-func sortName(l fileList) string {
-	if l.sortByChanges {
-		return "changes"
-	}
-	return "name"
 }
 
 // countTexts formats the three counts; binary files have none.

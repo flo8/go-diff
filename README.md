@@ -80,20 +80,19 @@ single punctuation characters, so `timeout := 500 * time.Millisecond` →
 `timeout := 1000 * time.Millisecond` highlights only `500` and `1000`.
 Unknown file types are compared character by character.
 
-## Tabs
+## History
 
-godiff has two tabs, like lazygit. Each keeps its place when you switch.
+Under the file table, a history panel lists the commits from HEAD (the
+last 1000). Its first row, `current`, is the comparison given on the
+command line: by default the uncommitted changes. Selecting a commit
+shows its files, compared with its parent, in the table above.
 
-| Key | Tab |
+| Key | Action |
 |---|---|
-| `1` | **Changes**: the comparison given on the command line |
-| `2` | **Log**: the commit history on the right; the selected commit's files (against its parent) on the left |
-| `tab` | switch between the two |
+| `tab` | move between the file table and the history |
+| `L` | show / hide the history panel |
 
-In the log, `↑ ↓` moves through commits, `Enter` or `→` moves to the
-commit's files, and `Esc` or `←` goes back to the commits. A commit's
-files load in the background once the cursor stops on it. The last 1000
-commits from HEAD are listed.
+A commit's files load in the background once the cursor stops on it.
 
 ## Keys
 
@@ -103,7 +102,7 @@ Press `?` in the app for the full list.
 |---|---|---|
 | `↑ ↓` / `j k` | select file | scroll |
 | `Enter` | open file | |
-| `Esc` | (log) back to commits | back to the file table |
+| `Esc` | | back to the file table |
 | `n` / `N` | | next / previous change |
 | `← →` / `h l` | | scroll left / right |
 | `s` | | side-by-side or unified |

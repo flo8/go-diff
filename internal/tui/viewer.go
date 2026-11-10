@@ -321,7 +321,7 @@ func (m *Model) viewerFooter(v *viewer) string {
 
 	return m.keyHints([][2]string{
 		{"n/N", "next/prev change"}, {"j/k", "scroll"}, {"←→", "pan"},
-		{"s", modeName}, {"[ ]", "prev/next file"}, {"esc", "back"}, {"tab", "switch tab"}, {"?", "help"},
+		{"s", modeName}, {"[ ]", "prev/next file"}, {"esc", "back"}, {"?", "help"},
 	})
 }
 

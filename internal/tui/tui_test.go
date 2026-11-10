@@ -93,109 +93,153 @@ func run(m *Model, cmd tea.Cmd) {
 	}
 }
 
-// Scenario: open the log tab and move through the history.
-// Goal: commits are listed newest first, and each commit shows its own
-// files with the right counts once loaded.
-func TestLogShowsEachCommitsFiles(t *testing.T) {
+// selectedPaths lists the visible files of the shown table.
+func selectedPaths(m *Model) []string {
+	var paths []string
+	if m.files.set == nil {
+		return nil
+	}
+	for _, f := range m.files.set.list.visible {
+		paths = append(paths, f.Change.Path())
+	}
+	return paths
+}
+
+// Scenario: start godiff with unstaged work in b.go.
+// Goal: the history lists "current" then the three commits, "current"
+// is selected, and the file table shows the working tree change.
+func TestStartsOnCurrent(t *testing.T) {
 	m := newTestModel(t)
 
-	press(m, "2")
-	if m.tab != tabLog || len(m.log.commits) != 3 {
-		t.Fatalf("tab=%d commits=%d, want log tab with 3 commits", m.tab, len(m.log.commits))
+	if m.hist.entries() != 4 || m.hist.selected != 0 {
+		t.Fatalf("entries=%d selected=%d, want 4 entries with current selected", m.hist.entries(), m.hist.selected)
 	}
-	if m.log.commits[0].Subject != "add b" {
-		t.Errorf("first commit = %q, want newest (add b)", m.log.commits[0].Subject)
+	if m.hist.commits[0].Subject != "add b" {
+		t.Errorf("first commit = %q, want newest (add b)", m.hist.commits[0].Subject)
 	}
-
-	// Newest commit: b.go added (2 code lines).
-	set := m.log.files.set
-	if set == nil || len(set.list.visible) != 1 || set.list.visible[0].Change.Path() != "b.go" {
-		t.Fatalf("add b files = %+v", set)
-	}
-	if got := set.list.visible[0].Counts.Added; got != 2 {
-		t.Errorf("add b: added = %d, want 2", got)
+	if m.files.set != m.current || m.current.list.visible[0].Counts.Modified != 1 {
+		t.Errorf("current should show b.go with 1 modified line: %v", selectedPaths(m))
 	}
 
-	// One commit down: a.go with one modified line.
-	press(m, "down")
-	set = m.log.files.set
-	if set == nil || set.list.visible[0].Change.Path() != "a.go" || set.list.visible[0].Counts.Modified != 1 {
-		t.Errorf("change a files = %+v", set)
-	}
-
-	// The view draws without panicking and names the commit.
-	if !strings.Contains(m.logView(), "change a") {
-		t.Errorf("log view does not show the selected commit")
+	view := m.mainView()
+	if !strings.Contains(view, "current") || !strings.Contains(view, "History") {
+		t.Errorf("main view should show the history panel with a current row")
 	}
 }
 
-// Scenario: open a file in the log tab, switch to changes, open a file
-// there, and switch back and forth with tab.
-// Goal: each tab keeps its own open file.
-func TestTabsKeepTheirPlace(t *testing.T) {
+// Scenario: move the focus to the history and walk down and back up.
+// Goal: each commit shows its own files and counts; back on "current"
+// the working tree change shows again.
+func TestHistoryShowsEachCommitsFiles(t *testing.T) {
 	m := newTestModel(t)
 
-	// Log tab: second commit, focus its files, open a.go.
-	press(m, "2")
+	press(m, "tab")
+	if m.focus != focusHistory {
+		t.Fatalf("tab should focus the history")
+	}
+
+	// "add b": b.go created with 2 code lines.
 	press(m, "down")
-	press(m, "enter")
-	press(m, "enter")
-	if m.log.files.viewer == nil || m.log.files.viewer.file.Change.Path() != "a.go" {
-		t.Fatalf("log viewer not open on a.go")
+	if p := selectedPaths(m); len(p) != 1 || p[0] != "b.go" || m.files.set.list.visible[0].Counts.Added != 2 {
+		t.Errorf("add b files = %v", p)
 	}
 
-	// Changes tab: nothing open yet, open b.go.
-	press(m, "tab")
-	if m.tab != tabChanges || m.changes.viewer != nil {
-		t.Fatalf("changes tab should start on its file table")
-	}
-	press(m, "enter")
-	if m.changes.viewer == nil || m.changes.viewer.file.Change.Path() != "b.go" {
-		t.Fatalf("changes viewer not open on b.go")
+	// "change a": a.go with one modified line.
+	press(m, "down")
+	if p := selectedPaths(m); len(p) != 1 || p[0] != "a.go" || m.files.set.list.visible[0].Counts.Modified != 1 {
+		t.Errorf("change a files = %v", p)
 	}
 
-	// Back and forth: both viewers are still there.
-	press(m, "tab")
-	if m.tab != tabLog || m.log.files.viewer == nil || m.log.files.viewer.file.Change.Path() != "a.go" {
-		t.Errorf("log tab lost its open file")
-	}
-	press(m, "1")
-	if m.changes.viewer == nil {
-		t.Errorf("changes tab lost its open file")
+	// Back to "current".
+	press(m, "g")
+	if m.files.set != m.current {
+		t.Errorf("g should go back to current")
 	}
 }
 
-// Scenario: move quickly through several commits.
-// Goal: only the commit the cursor stops on is loaded; stale ticks are
-// dropped.
+// Scenario: open a file of a commit, leave the viewer.
+// Goal: Esc returns to the split with the same commit selected and the
+// file table focused.
+func TestOpenFileFromCommit(t *testing.T) {
+	m := newTestModel(t)
+
+	press(m, "tab")
+	press(m, "down")
+	press(m, "down")
+	press(m, "enter") // focus the files
+	press(m, "enter") // open a.go
+	if m.files.viewer == nil || m.files.viewer.file.Change.Path() != "a.go" {
+		t.Fatalf("viewer not open on a.go")
+	}
+	if !strings.Contains(m.viewerView(&m.files), "^: a.go") {
+		t.Errorf("side titles should name the parent commit")
+	}
+
+	// tab does nothing while a file is open.
+	press(m, "tab")
+	if m.files.viewer == nil {
+		t.Errorf("tab should not close the viewer")
+	}
+
+	press(m, "esc")
+	if m.files.viewer != nil || m.hist.selected != 2 || m.focus != focusFiles {
+		t.Errorf("esc should return to the table: viewer=%v selected=%d focus=%d", m.files.viewer != nil, m.hist.selected, m.focus)
+	}
+}
+
+// Scenario: hide and show the history panel.
+// Goal: hiding moves the focus to the files; tab shows it again and
+// focuses it.
+func TestToggleHistory(t *testing.T) {
+	m := newTestModel(t)
+
+	press(m, "tab")
+	press(m, "L")
+	if m.showHistory || m.focus != focusFiles {
+		t.Errorf("L should hide the history and focus the files")
+	}
+	if strings.Contains(m.mainView(), "History") {
+		t.Errorf("hidden history should not be drawn")
+	}
+
+	press(m, "tab")
+	if !m.showHistory || m.focus != focusHistory {
+		t.Errorf("tab should show and focus the history")
+	}
+}
+
+// Scenario: move quickly through two commits.
+// Goal: only the commit the cursor stops on is loaded; the stale tick
+// is dropped.
 func TestLoadOnlyWhereTheCursorStops(t *testing.T) {
 	m := newTestModel(t)
-	press(m, "2")
+	press(m, "tab")
 
-	// Move twice without running the tick commands, then run only the
-	// first (stale) tick and the last one.
-	first := m.logKey("down")
-	last := m.logKey("down")
+	// Move twice without running the tick commands, then run the first
+	// (stale) tick and the last one.
+	first := m.historyKey("down")
+	last := m.historyKey("down")
 
 	run(m, first)
-	if m.log.loading != "" || len(m.log.cache) != 1 {
-		t.Errorf("stale tick started a load: loading=%q cached=%d", m.log.loading, len(m.log.cache))
+	if m.hist.loading != "" || len(m.hist.cache) != 0 {
+		t.Errorf("stale tick started a load: loading=%q cached=%d", m.hist.loading, len(m.hist.cache))
 	}
 
 	run(m, last)
-	if m.log.files.set == nil || m.log.files.set.list.visible[0].Change.Status != git.Added {
-		t.Errorf("oldest commit should show a.go as added: %+v", m.log.files.set)
+	if p := selectedPaths(m); len(p) != 1 || p[0] != "a.go" || len(m.hist.cache) != 1 {
+		t.Errorf("change a should be loaded alone: %v cached=%d", p, len(m.hist.cache))
 	}
 }
 
-// Scenario: toggle the comment filter while the log tab shows a commit.
-// Goal: the shown commit is recomputed with the new filters.
-func TestFilterToggleRecomputesShownCommit(t *testing.T) {
+// Scenario: toggle the comment filter while a commit is shown.
+// Goal: the shown commit and "current" are recomputed.
+func TestFilterToggleRecomputesShown(t *testing.T) {
 	m := newTestModel(t)
-	press(m, "2")
+	press(m, "tab")
+	press(m, "down")
 
 	press(m, "c")
-	if m.log.files.set.filters != m.filters || m.changes.set.filters != m.filters {
+	if m.files.set.filters != m.filters || m.current.filters != m.filters {
 		t.Errorf("shown sets not recomputed after filter toggle")
 	}
 }
