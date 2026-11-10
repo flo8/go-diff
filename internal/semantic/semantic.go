@@ -126,7 +126,23 @@ func makeLine(raw, cleaned string, tokenKeys []string, i int, f Filters) Line {
 		line.Key = cleaned
 	}
 
+	// Adding a comma after the last item of a list, so that the next
+	// item can be added, is formatting: `"tsc"` and `"tsc",` are equal.
+	if f.Formatting {
+		line.Key = trimTrailingComma(line.Key)
+	}
+
 	return line
+}
+
+// trimTrailingComma removes one comma at the end of a key, and the
+// spaces around it.
+func trimTrailingComma(key string) string {
+	var trimmed string
+
+	trimmed = strings.TrimRight(key, " \t")
+	trimmed = strings.TrimSuffix(trimmed, ",")
+	return strings.TrimRight(trimmed, " \t")
 }
 
 // isDropped reports whether a token is filtered out.

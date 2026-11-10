@@ -171,6 +171,46 @@ func TestPythonCommentsAndWhitespace(t *testing.T) {
 	}
 }
 
+// Scenario: a JSON entry gets a trailing comma because a new entry was
+// added after it.
+// Goal: the comma is not a change, only the new entry counts; with the
+// formatting filter off, the comma counts again.
+func TestTrailingCommaIsFormatting(t *testing.T) {
+	before := "{\n  \"typecheck\": \"tsc\"\n}\n"
+	after := "{\n  \"typecheck\": \"tsc\",\n  \"apk\": \"build\"\n}\n"
+
+	got := countChanges("package.json", before, after, DefaultFilters)
+	if got != (diff.Counts{Added: 1}) {
+		t.Errorf("counts = %+v, want 1 added", got)
+	}
+
+	f := DefaultFilters
+	f.Formatting = false
+	got = countChanges("package.json", before, after, f)
+	if got != (diff.Counts{Modified: 1, Added: 1}) {
+		t.Errorf("counts without formatting filter = %+v, want 1 modified, 1 added", got)
+	}
+}
+
+// Scenario: Go call whose last argument gets a trailing comma, with a
+// comment after it.
+// Goal: not counted; a real change on the same line still is.
+func TestTrailingCommaGo(t *testing.T) {
+	before := "package a\n\nvar x = f(\n\ta, b\n)\n"
+	after := "package a\n\nvar x = f(\n\ta, b, // note\n)\n"
+
+	got := countChanges("a.go", before, after, DefaultFilters)
+	if got.Total() != 0 {
+		t.Errorf("counts = %+v, want none", got)
+	}
+
+	changed := "package a\n\nvar x = f(\n\ta, c,\n)\n"
+	got = countChanges("a.go", before, changed, DefaultFilters)
+	if got != (diff.Counts{Modified: 1}) {
+		t.Errorf("counts = %+v, want 1 modified", got)
+	}
+}
+
 // Scenario: C preprocessor line, which Chroma tags as a comment type.
 // Goal: changing an #include is a real change.
 func TestCPreprocessorIsCode(t *testing.T) {

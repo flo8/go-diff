@@ -12,7 +12,7 @@ var helpSections = []struct {
 	{"Everywhere", [][2]string{
 		{"c", "ignore comment changes (on/off)"},
 		{"w", "ignore whitespace changes (on/off)"},
-		{"f", "ignore formatting changes: spacing between tokens (on/off)"},
+		{"f", "ignore formatting changes: spacing, trailing commas (on/off)"},
 		{"i", "ignore import changes, Go only (on/off)"},
 		{"t", "next theme"},
 		{"?", "show this help"},

@@ -63,7 +63,7 @@ comparison entirely, so adding or removing it is never a change.
 |---|---|---|
 | `c` | comments | Comment tokens are removed before comparing. On by default. |
 | `w` | whitespace | Indentation, runs of spaces and blank lines are ignored. On by default. |
-| `f` | formatting | Lines are compared token by token, so `a+b` equals `a + b`. On by default. |
+| `f` | formatting | Lines are compared token by token, so `a+b` equals `a + b`, and a trailing comma is ignored, so `"tsc"` equals `"tsc",`. On by default. |
 | `i` | imports | Go import declarations are ignored. Off by default. |
 
 Go files are read with `go/scanner` (comments, tokens) and `go/parser`
