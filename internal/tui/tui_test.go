@@ -88,6 +88,28 @@ func newTestModel(t *testing.T, prefetch bool) *Model {
 	return m
 }
 
+// reopen builds a new model on the same repository, as starting godiff
+// again would, to pick up changes made to the files.
+func reopen(t *testing.T, old *Model) *Model {
+	rg, err := old.repo.ResolveRange(git.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := review.Load(old.repo, rg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	review.ComputeAll(files, semantic.DefaultFilters)
+
+	m := New(Options{
+		Repo: old.repo, Files: files, Range: rg.String(),
+		Filters: semantic.DefaultFilters, Themes: theme.Builtins(), Theme: "dark",
+	})
+	m.resultDelay = 0
+	send(m, tea.WindowSizeMsg{Width: 120, Height: 30})
+	return m
+}
+
 // press sends a key and runs the commands it returns, and the commands
 // those return, the way the Bubble Tea loop would.
 func press(m *Model, key string) {
@@ -319,6 +341,34 @@ func TestFilterToggleRecomputesShown(t *testing.T) {
 	}
 	if m.files.set.filters != m.filters || m.current.filters != m.filters {
 		t.Errorf("shown sets not recomputed after filter toggle")
+	}
+}
+
+// Scenario: a working tree with three changed files: b.go (1 changed
+// line), c.go (4) and d.go (2); then o, then a commit shown after o.
+// Goal: the table starts sorted by changed lines (c, d, b); o sorts by
+// name, and other history entries follow the same order.
+func TestSortByChanges(t *testing.T) {
+	m := newTestModel(t, true)
+	dir := m.repo.Root
+	os.WriteFile(filepath.Join(dir, "c.go"), []byte("package a\n\nvar c = 1\nvar d = 2\nvar e = 3\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "d.go"), []byte("package a\n\nvar f = 1\n"), 0o644)
+	m = reopen(t, m)
+
+	if got := strings.Join(selectedPaths(m), " "); got != "c.go d.go b.go" {
+		t.Errorf("by changes: %s, want c.go d.go b.go", got)
+	}
+
+	press(m, "o")
+	if got := strings.Join(selectedPaths(m), " "); got != "b.go c.go d.go" {
+		t.Errorf("by name: %s, want b.go c.go d.go", got)
+	}
+
+	// A commit shown after o is sorted by name too.
+	press(m, "tab")
+	press(m, "down")
+	if m.files.set.list.sortByChanges {
+		t.Errorf("commit tables should follow o")
 	}
 }
 

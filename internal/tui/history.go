@@ -120,6 +120,7 @@ func (m *Model) selectEntry(i int) tea.Cmd {
 	m.files = pane{set: set}
 	if set != nil {
 		set.recompute(m.filters)
+		m.applySort(set)
 		return m.nextLoad()
 	}
 
@@ -205,6 +206,7 @@ func (m *Model) finishLoad(msg commitLoaded) tea.Cmd {
 
 	commit, isCommit = m.hist.selectedCommit()
 	if isCommit && commit.Hash == msg.hash {
+		m.applySort(msg.set)
 		m.files.set = msg.set
 	}
 

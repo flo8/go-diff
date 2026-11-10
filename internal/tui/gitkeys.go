@@ -294,8 +294,7 @@ func (m *Model) applyRefresh(msg refreshed) tea.Cmd {
 	}
 
 	commit, isCommit = m.hist.selectedCommit()
-	msg.set.list.sortByChanges = m.current.list.sortByChanges
-	msg.set.list.refresh(msg.set.files)
+	m.applySort(msg.set)
 	m.current = msg.set
 	m.hist.commits = msg.commits
 	m.hist.unpushed = msg.unpushed

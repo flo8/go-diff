@@ -47,12 +47,13 @@ type Model struct {
 	autoTheme bool
 	pal       *render.Palette
 
-	current     *changeSet // the comparison given on the command line
-	hist        history
-	files       pane // the selected history entry's files and open viewer
-	focus       focusArea
-	showHistory bool
-	help        bool
+	current       *changeSet // the comparison given on the command line
+	hist          history
+	files         pane // the selected history entry's files and open viewer
+	focus         focusArea
+	showHistory   bool
+	sortByChanges bool // file tables sort by changed lines, else by name
+	help          bool
 
 	// Changing the repository: see gitkeys.go and job.go.
 	rangeOpts   git.Options
@@ -74,14 +75,15 @@ func New(opt Options) *Model {
 	var m *Model
 
 	m = &Model{
-		repo:        opt.Repo,
-		filters:     opt.Filters,
-		themes:      opt.Themes,
-		autoTheme:   opt.Theme == "",
-		showHistory: true,
-		rangeOpts:   opt.RangeOpts,
-		canStage:    isWorktreeRange(opt.RangeOpts),
-		resultDelay: resultDelay,
+		repo:          opt.Repo,
+		filters:       opt.Filters,
+		themes:        opt.Themes,
+		autoTheme:     opt.Theme == "",
+		showHistory:   true,
+		sortByChanges: true,
+		rangeOpts:     opt.RangeOpts,
+		canStage:      isWorktreeRange(opt.RangeOpts),
+		resultDelay:   resultDelay,
 	}
 
 	m.themeIdx = themeIndex(m.themes, opt.Theme)
@@ -89,6 +91,7 @@ func New(opt Options) *Model {
 
 	// "current" is selected first; commits load when selected.
 	m.current = newChangeSet(opt.Files, opt.Range, opt.Filters)
+	m.applySort(m.current)
 	m.files = pane{set: m.current}
 	m.hist.cache = map[string]*changeSet{}
 	m.hist.loadErr = map[string]error{}
@@ -430,12 +433,23 @@ func (m *Model) mainFooter() string {
 	return m.keyHints(hints)
 }
 
-// sortName names the sort order of the shown file table.
+// sortName names the sort order of the file tables.
 func (m *Model) sortName() string {
-	if m.files.set != nil && m.files.set.list.sortByChanges {
+	if m.sortByChanges {
 		return "changes"
 	}
 	return "name"
+}
+
+// applySort sorts a file table the way all of them are sorted, when it
+// is shown. Each loaded commit keeps its own table, so it may have been
+// sorted before o was pressed.
+func (m *Model) applySort(s *changeSet) {
+	if s.list.sortByChanges == m.sortByChanges {
+		return
+	}
+	s.list.sortByChanges = m.sortByChanges
+	s.list.refresh(s.files)
 }
 
 // headerLine shows the app name, the branch and a title on the left and

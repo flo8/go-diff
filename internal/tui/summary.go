@@ -115,8 +115,8 @@ func (m *Model) fileListKey(p *pane, key string) {
 	case "end", "G":
 		l.move(len(l.visible))
 	case "o":
-		l.sortByChanges = !l.sortByChanges
-		l.refresh(p.set.files)
+		m.sortByChanges = !m.sortByChanges
+		m.applySort(p.set)
 	case "enter", "l", "right":
 		m.openSelected(p)
 	}
