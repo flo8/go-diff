@@ -49,18 +49,22 @@ func Builtins() []Theme {
 	return []Theme{dark(), light(), highContrast(), ansi()}
 }
 
+// dark uses the terminal palette from ~/.bashrc: lavender text on near
+// black, mint for additions, pink for removals. Change backgrounds are
+// the mint and pink mixed into the background (12% for lines, 28% for
+// changed words) so syntax colors stay readable on top of them.
 func dark() Theme {
 	return Theme{
 		Name: "dark", Dark: true,
-		Background: "#1e2228", Foreground: "#c8ccd4", Muted: "#6b717d",
-		Header: "#61afef", Border: "#3b4048",
-		LineNumber: "#4f5666", Selection: "#2c323d", Cursor: "#e5c07b", Filler: "#191c21",
-		AddedBg: "#1f3326", RemovedBg: "#3a2226",
-		AddedWord: "#2e5c38", RemovedWord: "#6e2c34",
-		AddedFg: "#98c379", RemovedFg: "#e06c75", ModifiedFg: "#e5c07b",
+		Background: "#0c0c0c", Foreground: "#b7bdf8", Muted: "#5b5e7c",
+		Header: "#ffffff", Border: "#2b2d3f",
+		LineNumber: "#5b5e7c", Selection: "#26264d", Cursor: "#fffa8c", Filler: "#141418",
+		AddedBg: "#152622", RemovedBg: "#291b25",
+		AddedWord: "#204840", RemovedWord: "#502f46",
+		AddedFg: "#54e2c5", RemovedFg: "#ff89dc", ModifiedFg: "#fffa8c",
 		Syntax: Syntax{
-			Keyword: "#c678dd", Type: "#e5c07b", Function: "#61afef",
-			String: "#98c379", Number: "#d19a66", Comment: "#7f848e", Operator: "#56b6c2",
+			Keyword: "#ff89dc", Type: "#7a73db", Function: "#fffa8c",
+			String: "#54e2c5", Number: "#7a73db", Comment: "#767676", Operator: "#b7bdf8",
 		},
 	}
 }
