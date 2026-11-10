@@ -11,13 +11,34 @@ godiff only reads the repository: it never changes files or the index.
 
 From a clone:
 
-    go install ./cmd/godiff
+    make install
 
 From anywhere:
 
     go install github.com/flo8/go-diff/cmd/godiff@latest
 
-Both put `godiff` in `$(go env GOPATH)/bin` (usually `~/go/bin`).
+Both put `godiff` in `$(go env GOPATH)/bin` (usually `~/go/bin`), so it
+runs from any folder if that directory is on your `PATH`. Run
+`make install` again after pulling or changing the code.
+
+## Development
+
+| Target | What it does |
+|---|---|
+| `make` / `make check` | everything below that should pass before a commit: `fmt-check`, `vet`, `lint`, `test`, `vulncheck` |
+| `make build` | build `bin/godiff` |
+| `make install` | `go install ./cmd/godiff` |
+| `make test` | run the tests (under a second) |
+| `make race` | run the tests with the race detector |
+| `make vet` | `go vet ./...` |
+| `make lint` | staticcheck (S1021 is turned off in `staticcheck.conf`: variables are declared at the top of functions on purpose) |
+| `make vulncheck` | govulncheck: known vulnerabilities in the code and its dependencies |
+| `make fmt` / `make fmt-check` | format with gofmt / fail if a file is not formatted |
+| `make tidy` | `go mod tidy` |
+| `make clean` | remove `bin/` |
+
+staticcheck and govulncheck run with `go run tool@latest`: nothing to
+install, and `go.mod` does not change.
 
 ## Usage
 
