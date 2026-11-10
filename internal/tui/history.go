@@ -275,7 +275,7 @@ func (m *Model) historyPanel(height int) []string {
 	rows = max(height-1, 1)
 	m.scrollHistory(rows)
 
-	lines = append(lines, m.titledRule("History", m.width))
+	lines = append(lines, m.titledRule("History"+m.branchText(), m.width))
 
 	if m.hist.err != nil {
 		lines = append(lines, m.pal.Paint("  "+m.hist.err.Error(), m.pal.RemovedFg))
@@ -368,6 +368,30 @@ func (m *Model) currentSubject() string {
 		return m.current.rangeName + "  (no changes)"
 	}
 	return m.current.rangeName
+}
+
+// branchText describes the branch for the history title, like
+// "  main → origin/main ↑2 ↓1", or "" when it is not known.
+func (m *Model) branchText() string {
+	var st = m.status
+	var text string
+
+	if st.Branch == "" {
+		return ""
+	}
+
+	text = "  " + st.Branch
+	if st.Upstream == "" {
+		return text + " (no upstream)"
+	}
+	text += " → " + st.Upstream
+	if st.Ahead > 0 {
+		text += fmt.Sprintf(" ↑%d", st.Ahead)
+	}
+	if st.Behind > 0 {
+		text += fmt.Sprintf(" ↓%d", st.Behind)
+	}
+	return text
 }
 
 // titledRule draws "── Title ─────" across width columns.

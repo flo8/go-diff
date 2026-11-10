@@ -5,7 +5,8 @@ meaningful changes, counts removed, added and modified lines, and shows a
 side-by-side diff with the changed words highlighted inside each line.
 
 Whitespace, formatting and comment edits are filtered out by default.
-godiff only reads the repository: it never changes files or the index.
+godiff only reads the repository, except when you press one of the git
+keys (stage, commit, pull, push): it never changes files on disk.
 
 ## Build
 
@@ -61,10 +62,12 @@ comparison entirely, so adding or removing it is never a change.
 
 | Key | Filter | Effect |
 |---|---|---|
-| `c` | comments | Comment tokens are removed before comparing. On by default. |
-| `w` | whitespace | Indentation, runs of spaces and blank lines are ignored. On by default. |
-| `f` | formatting | Lines are compared token by token, so `a+b` equals `a + b`, and a trailing comma is ignored, so `"tsc"` equals `"tsc",`. On by default. |
-| `i` | imports | Go import declarations are ignored. Off by default. |
+| `F c` | comments | Comment tokens are removed before comparing. On by default. |
+| `F w` | whitespace | Indentation, runs of spaces and blank lines are ignored. On by default. |
+| `F f` | formatting | Lines are compared token by token, so `a+b` equals `a + b`, and a trailing comma is ignored, so `"tsc"` equals `"tsc",`. On by default. |
+| `F i` | imports | Go import declarations are ignored. Off by default. |
+
+Press `F`, then the filter's key.
 
 Go files are read with `go/scanner` (comments, tokens) and `go/parser`
 (import blocks). Both accept code that does not compile. Other languages
@@ -92,10 +95,38 @@ shows its files, compared with its parent, in the table above.
 | `tab` | move between the file table and the history |
 | `L` | show / hide the history panel |
 
-Each row shows the commit's removed, added and modified totals, with the
-same filters as the file table. Commits load in the background, one at a
-time: the selected commit first, then the other rows on screen. Rows show
-`·` until their totals are known.
+Each row shows the commit's number of files and its removed, added and
+modified totals, with the same filters as the file table. Commits load
+in the background, one at a time: the selected commit first, then the
+other rows on screen. Rows show `·` until their totals are known.
+
+The panel's title shows the branch, its upstream, and how many commits
+it is ahead (`↑`) and behind (`↓`) as of the last fetch.
+
+## Commit, pull, push
+
+| Key | Action |
+|---|---|
+| `space` | stage or unstage the selected file |
+| `a` | stage everything, or unstage everything when all is staged |
+| `c` | commit the staged files with a one-line message (Enter commits, Esc cancels) |
+| `C` | commit with your editor (`$EDITOR`), for a full message |
+| `p` | `git pull --ff-only`: fast-forwards, or fails if the branches have diverged |
+| `P` | `git push`; a branch without upstream goes to `origin` and gets it set |
+
+Staging works on `current` when godiff runs without arguments (HEAD vs
+working tree). The file table then shows `●` staged, `◐` partly staged
+and `○` not staged. Commit, pull and push work from anywhere.
+
+Commit, pull and push run in the background with a spinner and, when git
+reports one, a progress bar. The result stays in the footer: a success
+for a few seconds, an error (with git's output) until the next key.
+Hooks run as usual. godiff never merges, rebases or force-pushes.
+
+Git cannot ask for anything while the TUI owns the terminal, so password
+prompts are turned off: SSH keys from the agent work, a key that needs
+its passphrase typed fails with git's message. If committing needs the
+terminal (a GPG pinentry in the terminal, for example), use `C`.
 
 ## Keys
 
@@ -111,7 +142,10 @@ Press `?` in the app for the full list.
 | `s` | | side-by-side or unified |
 | `[` / `]` | | previous / next file |
 | `o` | sort by name or by changes | |
-| `c w f i` | toggle filters | toggle filters |
+| `F` then `c w f i` | toggle filters | toggle filters |
+| `space` / `a` | stage file / all | |
+| `c` / `C` | commit | commit |
+| `p` / `P` | pull / push | pull / push |
 | `t` | next theme | next theme |
 | `q` | quit | quit |
 
@@ -142,7 +176,8 @@ field names are in `internal/theme/theme.go`.
 ## Layout
 
     cmd/godiff         command line, config file
-    internal/git       git commands: changed files, file contents (one cat-file process)
+    internal/git       git commands: changed files, file contents (one cat-file process);
+                       actions.go has the commands that change the repository
     internal/semantic  per-language tokenizers and comparison keys
     internal/diff      line matching (Myers, patience-style anchors), pairing, word diff
     internal/review    ties the above together for each file

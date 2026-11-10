@@ -5,6 +5,7 @@ package tui
 import (
 	"image/color"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -26,12 +27,13 @@ const (
 
 // Options configure a new Model.
 type Options struct {
-	Repo    *git.Repo
-	Files   []*review.File // already computed with Filters
-	Range   string         // description of what is compared
-	Filters semantic.Filters
-	Themes  []theme.Theme
-	Theme   string // theme name, or "" to pick dark or light from the terminal
+	Repo      *git.Repo
+	Files     []*review.File // already computed with Filters
+	Range     string         // description of what is compared
+	RangeOpts git.Options    // what Range was resolved from, to read it again
+	Filters   semantic.Filters
+	Themes    []theme.Theme
+	Theme     string // theme name, or "" to pick dark or light from the terminal
 }
 
 // Model is the Bubble Tea model of the whole application.
@@ -51,6 +53,17 @@ type Model struct {
 	showHistory bool
 	help        bool
 
+	// Changing the repository: see gitkeys.go and job.go.
+	rangeOpts   git.Options
+	canStage    bool // "current" is HEAD → working tree
+	status      git.WorkStatus
+	job         *job          // running commit, pull or push
+	jobSeq      int           // ids of jobs and results
+	result      *result       // outcome of the last action
+	input       *textInput    // commit message being typed
+	filterKey   bool          // F was pressed: the next key picks a filter
+	resultDelay time.Duration // how long a success stays; 0 until the next key
+
 	width  int
 	height int
 }
@@ -65,6 +78,9 @@ func New(opt Options) *Model {
 		themes:      opt.Themes,
 		autoTheme:   opt.Theme == "",
 		showHistory: true,
+		rangeOpts:   opt.RangeOpts,
+		canStage:    isWorktreeRange(opt.RangeOpts),
+		resultDelay: resultDelay,
 	}
 
 	m.themeIdx = themeIndex(m.themes, opt.Theme)
@@ -77,9 +93,16 @@ func New(opt Options) *Model {
 	m.hist.loadErr = map[string]error{}
 	if m.repo != nil {
 		m.hist.commits, m.hist.err = m.repo.Log(logLimit)
+		m.status, _ = m.repo.Status()
 	}
 
 	return m
+}
+
+// isWorktreeRange reports whether the command line asked for the default
+// comparison, HEAD → working tree, where staging files makes sense.
+func isWorktreeRange(o git.Options) bool {
+	return !o.Staged && !o.Unstaged && o.Commit == "" && len(o.Args) == 0
 }
 
 // Init asks the terminal for its background color, to choose between
@@ -108,7 +131,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.startLoad(msg)
 	case commitLoaded:
 		return m, m.finishLoad(msg)
+	case jobLine:
+		return m, m.jobProgress(msg)
+	case jobDone:
+		return m, m.finishJob(msg)
+	case editorDone:
+		return m, m.finishEditorCommit(msg)
+	case refreshed:
+		return m, m.applyRefresh(msg)
+	case spinTick:
+		return m, m.spinNext(msg)
+	case clearResult:
+		m.hideResult(msg)
+	case tea.PasteMsg:
+		if m.input != nil {
+			m.input.insert(msg.Content)
+		}
 	case tea.KeyPressMsg:
+		if m.input != nil {
+			return m, m.inputKey(msg.String(), msg.Text)
+		}
 		return m, m.handleKey(msg.String())
 	}
 
@@ -127,6 +169,23 @@ func (m *Model) handleKey(key string) tea.Cmd {
 		return nil
 	}
 
+	// After F, the key picks a filter; any other key cancels.
+	if m.filterKey {
+		m.filterKey = false
+		m.toggleFilter(key)
+		return nil
+	}
+
+	// An error stays on screen until the next key, and so does a success
+	// when it has no delay.
+	if m.result != nil && (m.result.err || m.resultDelay == 0) {
+		m.result = nil
+	}
+
+	if cmd, ok := m.gitKey(key); ok {
+		return cmd
+	}
+
 	switch key {
 	case "q", "ctrl+c":
 		return tea.Quit
@@ -135,8 +194,8 @@ func (m *Model) handleKey(key string) tea.Cmd {
 	case "t":
 		m.autoTheme = false
 		m.setTheme((m.themeIdx + 1) % len(m.themes))
-	case "c", "w", "f", "i":
-		m.toggleFilter(key)
+	case "F":
+		m.filterKey = true
 	case "tab":
 		m.toggleFocus()
 	case "L":
@@ -175,6 +234,8 @@ func (m *Model) toggleHistory() {
 // screenKey sends a key to the open viewer or the focused panel.
 func (m *Model) screenKey(key string) tea.Cmd {
 	switch {
+	case m.stagingShown() && (key == "space" || key == "a"):
+		m.stageKey(key)
 	case m.files.viewer != nil:
 		m.viewerKey(&m.files, key)
 	case m.focus == focusHistory:
@@ -186,8 +247,16 @@ func (m *Model) screenKey(key string) tea.Cmd {
 	return nil
 }
 
+// stagingShown reports whether the file table shows "current" with its
+// staging marks, so that space and a stage files.
+func (m *Model) stagingShown() bool {
+	return m.canStage && m.repo != nil && m.files.viewer == nil &&
+		m.focus == focusFiles && m.files.set == m.current
+}
+
 // toggleFilter flips one filter and recomputes what is on screen. Other
-// loaded commits are recomputed when they are shown again.
+// loaded commits are recomputed when they are shown again. Keys other
+// than c, w, f and i do nothing.
 func (m *Model) toggleFilter(key string) {
 	switch key {
 	case "c":
@@ -198,6 +267,8 @@ func (m *Model) toggleFilter(key string) {
 		m.filters.Formatting = !m.filters.Formatting
 	case "i":
 		m.filters.Imports = !m.filters.Imports
+	default:
+		return
 	}
 
 	// The history rows on screen show totals: keep them up to date.
@@ -255,9 +326,12 @@ func (m *Model) View() tea.View {
 // shown) and the footer.
 func (m *Model) mainView() string {
 	var tableHeight int
+	var detail []string
 	var lines []string
 
-	tableHeight = m.height - 2
+	// An error's output takes room from the file table.
+	detail = m.resultDetail()
+	tableHeight = m.height - 2 - len(detail)
 	if m.showHistory {
 		tableHeight -= m.historyHeight()
 	}
@@ -267,6 +341,7 @@ func (m *Model) mainView() string {
 	if m.showHistory {
 		lines = append(lines, m.historyPanel(m.historyHeight())...)
 	}
+	lines = append(lines, detail...)
 	lines = append(lines, m.mainFooter())
 
 	return strings.Join(lines, "\n")
@@ -302,9 +377,33 @@ func (m *Model) filesPanel(height int) []string {
 	return lines
 }
 
-// mainFooter lists the keys of the focused panel.
+// statusLine is the footer while something is going on: the commit
+// message being typed, a filter being picked, a running job or the last
+// outcome. It is "" otherwise.
+func (m *Model) statusLine() string {
+	switch {
+	case m.input != nil:
+		return m.inputLine()
+	case m.filterKey:
+		return m.keyHints([][2]string{
+			{"c", "comments"}, {"w", "whitespace"}, {"f", "formatting"}, {"i", "imports"}, {"esc", "cancel"},
+		})
+	case m.job != nil:
+		return m.jobStatusLine()
+	case m.result != nil:
+		return m.resultLine()
+	}
+	return ""
+}
+
+// mainFooter shows the status line, or the keys of the focused panel.
 func (m *Model) mainFooter() string {
 	var historyKey [2]string
+	var hints [][2]string
+
+	if line := m.statusLine(); line != "" {
+		return line
+	}
 
 	historyKey = [2]string{"L", "hide history"}
 	if !m.showHistory {
@@ -314,14 +413,19 @@ func (m *Model) mainFooter() string {
 	if m.focus == focusHistory {
 		return m.keyHints([][2]string{
 			{"↑↓", "select entry"}, {"⏎/tab", "files"},
-			historyKey, {"?", "help"}, {"q", "quit"},
+			historyKey, {"c", "commit"}, {"p/P", "pull/push"}, {"?", "help"}, {"q", "quit"},
 		})
 	}
 
-	return m.keyHints([][2]string{
-		{"↑↓", "select file"}, {"⏎", "open"}, {"o", "sort: " + m.sortName()},
-		{"tab", "history"}, historyKey, {"t", "theme: " + m.pal.Theme.Name}, {"?", "help"}, {"q", "quit"},
-	})
+	hints = [][2]string{{"↑↓", "select file"}, {"⏎", "open"}}
+	if m.stagingShown() {
+		hints = append(hints, [2]string{"space/a", "stage"})
+	}
+	hints = append(hints, [][2]string{
+		{"c", "commit"}, {"p/P", "pull/push"}, {"o", "sort: " + m.sortName()},
+		{"tab", "history"}, historyKey, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
+	}...)
+	return m.keyHints(hints)
 }
 
 // sortName names the sort order of the shown file table.
@@ -360,7 +464,8 @@ func (m *Model) filterBadges(compact bool) string {
 	parts = append(parts, m.badge("f", "formatting", m.filters.Formatting, compact))
 	parts = append(parts, m.badge("i", "imports", m.filters.Imports, compact))
 
-	return m.pal.Paint("ignore: ", m.pal.Muted) + strings.Join(parts, m.pal.Paint("  ", nil))
+	return m.pal.Style(m.pal.Header, m.pal.Bg, true).Render("F") +
+		m.pal.Paint(" ignore: ", m.pal.Muted) + strings.Join(parts, m.pal.Paint("  ", nil))
 }
 
 // badge draws one filter with its key highlighted.

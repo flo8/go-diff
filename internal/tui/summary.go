@@ -138,7 +138,9 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 	var lines []string
 	var footer int
 	var rows int
+	var staging bool
 
+	staging = s == m.current && m.canStage && m.repo != nil
 	footer = 0
 	if withTotals {
 		footer = 2
@@ -146,11 +148,11 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 	rows = max(height-2-footer, 1)
 	s.list.scroll(rows)
 
-	lines = append(lines, m.tableTitles(width))
+	lines = append(lines, m.tableTitles(width, staging))
 	lines = append(lines, m.rule(width))
 
 	for i := s.list.top; i < len(s.list.visible) && i < s.list.top+rows; i++ {
-		lines = append(lines, m.fileRow(s.list.visible[i], i == s.list.selected, focused, width))
+		lines = append(lines, m.fileRow(s.list.visible[i], staging, i == s.list.selected, focused, width))
 	}
 
 	// An empty list says why.
@@ -176,11 +178,15 @@ func nameColWidth(width int) int {
 	return max(width-2-3*numColWidth-detailsColWidth-2, 10)
 }
 
-// tableTitles draws the column titles.
-func (m *Model) tableTitles(width int) string {
+// tableTitles draws the column titles; with staging, a narrow column
+// for the staging marks comes first.
+func (m *Model) tableTitles(width int, staging bool) string {
 	var b strings.Builder
 
 	b.WriteString("  ")
+	if staging {
+		b.WriteString("  ")
+	}
 	b.WriteString(padLeft("Removed", numColWidth))
 	b.WriteString(padLeft("Added", numColWidth))
 	b.WriteString(padLeft("Modified", numColWidth))
@@ -196,8 +202,20 @@ func (m *Model) rule(width int) string {
 	return m.pal.Paint(strings.Repeat("─", width), m.pal.Border)
 }
 
-// fileRow draws one file of the table.
-func (m *Model) fileRow(f *review.File, selected, focused bool, width int) string {
+// stageMark shows how much of a file is staged: ● all, ◐ part, ○ none.
+func (m *Model) stageMark(f *review.File) (string, color.Color) {
+	switch m.status.Files[f.Change.Path()] {
+	case git.Staged:
+		return "● ", m.pal.AddedFg
+	case git.Partly:
+		return "◐ ", m.pal.ModifiedFg
+	}
+	return "○ ", m.pal.Muted
+}
+
+// fileRow draws one file of the table, after its staging mark when
+// staging is set.
+func (m *Model) fileRow(f *review.File, staging, selected, focused bool, width int) string {
 	var highlight bool
 	var bg color.Color
 	var marker string
@@ -219,6 +237,10 @@ func (m *Model) fileRow(f *review.File, selected, focused bool, width int) strin
 	// Counts first, then the kind of change, then the name, so the eye
 	// stays on the left side of the screen.
 	b.WriteString(m.pal.Style(m.pal.Header, bg, true).Render(marker))
+	if staging {
+		mark, fg := m.stageMark(f)
+		b.WriteString(m.pal.Style(fg, bg, false).Render(mark))
+	}
 	b.WriteString(m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(counts[0], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.AddedFg, bg, false).Render(padLeft(counts[1], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(counts[2], numColWidth)))

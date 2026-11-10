@@ -98,12 +98,13 @@ func run() error {
 	review.ComputeAll(files, cfg.Filters)
 
 	model := tui.New(tui.Options{
-		Repo:    repo,
-		Files:   files,
-		Range:   rg.String(),
-		Filters: cfg.Filters,
-		Themes:  themes,
-		Theme:   themeName,
+		Repo:      repo,
+		Files:     files,
+		Range:     rg.String(),
+		RangeOpts: opt,
+		Filters:   cfg.Filters,
+		Themes:    themes,
+		Theme:     themeName,
 	})
 
 	_, err = tea.NewProgram(model).Run()

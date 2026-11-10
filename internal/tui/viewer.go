@@ -205,7 +205,7 @@ func (m *Model) viewerKey(p *pane, key string) {
 		v.xoff -= panStep
 	case "n":
 		v.next(m.height)
-	case "N", "p":
+	case "N":
 		v.prev(m.height)
 	case "s":
 		v.toggleMode(m.height)
@@ -267,6 +267,9 @@ func (m *Model) viewerView(p *pane) string {
 	}
 
 	lines = append(lines, m.viewerFooter(v))
+	if line := m.statusLine(); line != "" {
+		lines[len(lines)-1] = line
+	}
 	return strings.Join(lines, "\n")
 }
 

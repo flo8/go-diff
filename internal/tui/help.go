@@ -10,13 +10,21 @@ var helpSections = []struct {
 	keys  [][2]string
 }{
 	{"Everywhere", [][2]string{
-		{"c", "ignore comment changes (on/off)"},
-		{"w", "ignore whitespace changes (on/off)"},
-		{"f", "ignore formatting changes: spacing, trailing commas (on/off)"},
-		{"i", "ignore import changes, Go only (on/off)"},
+		{"F c", "ignore comment changes (on/off)"},
+		{"F w", "ignore whitespace changes (on/off)"},
+		{"F f", "ignore formatting changes: spacing, trailing commas (on/off)"},
+		{"F i", "ignore import changes, Go only (on/off)"},
 		{"t", "next theme"},
 		{"?", "show this help"},
 		{"q", "quit"},
+	}},
+	{"Git", [][2]string{
+		{"space", "stage / unstage the selected file (\"current\" only)"},
+		{"a", "stage everything / unstage everything"},
+		{"c", "commit the staged files, with a one-line message"},
+		{"C", "commit with your editor ($EDITOR) for a full message"},
+		{"p", "pull: fast-forward only, never merges"},
+		{"P", "push: sets the upstream the first time, never forces"},
 	}},
 	{"Panels", [][2]string{
 		{"tab", "move between the file table and the history"},

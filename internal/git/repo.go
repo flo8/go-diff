@@ -1,8 +1,9 @@
 // Package git reads changed files and file contents from a Git repository.
 //
-// It only runs read-only Git commands. It never writes to the working tree
-// or the index: every command runs with --no-optional-locks so that Git
-// does not even refresh the index stat cache as a side effect.
+// Reading never writes to the working tree or the index: those commands
+// run with --no-optional-locks so that Git does not even refresh the index
+// stat cache as a side effect. The commands that change the repository
+// (stage, commit, pull, push) are all in actions.go.
 package git
 
 import (

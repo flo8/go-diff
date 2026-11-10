@@ -80,6 +80,7 @@ func newTestModel(t *testing.T, prefetch bool) *Model {
 		Repo: repo, Files: files, Range: rg.String(),
 		Filters: semantic.DefaultFilters, Themes: theme.Builtins(), Theme: "dark",
 	})
+	m.resultDelay = 0
 	_, cmd := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	if prefetch {
 		run(m, cmd)
@@ -93,11 +94,36 @@ func press(m *Model, key string) {
 	run(m, m.handleKey(key))
 }
 
+// run runs a command and everything it leads to. A batch runs its
+// commands one after the other, in order.
 func run(m *Model, cmd tea.Cmd) {
 	for cmd != nil {
 		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, c := range batch {
+				run(m, c)
+			}
+			return
+		}
 		_, cmd = m.Update(msg)
 	}
+}
+
+// send passes a message to Update and runs what it returns.
+func send(m *Model, msg tea.Msg) {
+	_, cmd := m.Update(msg)
+	run(m, cmd)
+}
+
+// isolateGit makes the git commands godiff runs itself (commit, push)
+// use a fixed identity and ignore the user's config, hooks included.
+func isolateGit(t *testing.T) {
+	t.Setenv("GIT_AUTHOR_NAME", "test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
 }
 
 // selectedPaths lists the visible files of the shown table.
@@ -278,15 +304,33 @@ func TestHistoryRowTotals(t *testing.T) {
 	}
 }
 
-// Scenario: toggle the comment filter while a commit is shown.
-// Goal: the shown commit and "current" are recomputed.
+// Scenario: toggle the comment filter (F then c) while a commit is shown.
+// Goal: the filter flips and the shown commit and "current" are
+// recomputed.
 func TestFilterToggleRecomputesShown(t *testing.T) {
 	m := newTestModel(t, true)
 	press(m, "tab")
 	press(m, "down")
 
+	press(m, "F")
 	press(m, "c")
+	if m.filters.Comments {
+		t.Errorf("F c should turn the comment filter off")
+	}
 	if m.files.set.filters != m.filters || m.current.filters != m.filters {
 		t.Errorf("shown sets not recomputed after filter toggle")
+	}
+}
+
+// Scenario: F followed by a key that is not a filter.
+// Goal: nothing changes and the next key works normally again.
+func TestFilterKeyCancel(t *testing.T) {
+	m := newTestModel(t, true)
+	before := m.filters
+
+	press(m, "F")
+	press(m, "esc")
+	if m.filters != before || m.filterKey {
+		t.Errorf("esc after F should change nothing")
 	}
 }
