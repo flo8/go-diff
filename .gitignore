@@ -33,5 +33,6 @@ go.work.sum
 # .vscode/
 
 # Built binaries
+/bin/
 /godiff
 /go-diff
