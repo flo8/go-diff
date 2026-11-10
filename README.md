@@ -9,11 +9,15 @@ godiff only reads the repository: it never changes files or the index.
 
 ## Build
 
-    go build -o godiff .
+From a clone:
 
-or
+    go install ./cmd/godiff
 
-    go install github.com/flo8/go-diff@latest   # installs the binary as "go-diff"
+From anywhere:
+
+    go install github.com/flo8/go-diff/cmd/godiff@latest
+
+Both put `godiff` in `$(go env GOPATH)/bin` (usually `~/go/bin`).
 
 ## Usage
 
@@ -99,6 +103,7 @@ field names are in `internal/theme/theme.go`.
 
 ## Layout
 
+    cmd/godiff         command line, config file
     internal/git       git commands: changed files, file contents (one cat-file process)
     internal/semantic  per-language tokenizers and comparison keys
     internal/diff      line matching (Myers, patience-style anchors), pairing, word diff
