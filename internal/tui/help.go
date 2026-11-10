@@ -18,7 +18,17 @@ var helpSections = []struct {
 		{"?", "show this help"},
 		{"q", "quit"},
 	}},
-	{"File summary", [][2]string{
+	{"Tabs", [][2]string{
+		{"1", "changes: the comparison from the command line"},
+		{"2", "log: commit history, each commit against its parent"},
+		{"tab", "switch between the two (each keeps its place)"},
+	}},
+	{"Log", [][2]string{
+		{"↑ ↓  j k", "select a commit (its files show on the left)"},
+		{"Enter  →", "move to the commit's files"},
+		{"Esc  ←", "back to the commits"},
+	}},
+	{"File table", [][2]string{
 		{"↑ ↓  j k", "select a file"},
 		{"PgUp PgDn  g G", "page up / down, first / last"},
 		{"Enter", "open the selected file"},

@@ -171,17 +171,17 @@ func (v *viewer) prev(screenHeight int) {
 	}
 }
 
-// viewerKey handles keys on the diff screen.
-func (m *Model) viewerKey(key string) {
+// viewerKey handles keys on the diff screen of a pane.
+func (m *Model) viewerKey(p *pane, key string) {
 	var v *viewer
 	var page int
 
-	v = m.viewer
+	v = p.viewer
 	page = bodyHeight(m.height)
 
 	switch key {
 	case "esc", "backspace":
-		m.viewer = nil
+		p.viewer = nil
 		return
 	case "down", "j":
 		v.top++
@@ -210,42 +210,45 @@ func (m *Model) viewerKey(key string) {
 	case "s":
 		v.toggleMode(m.height)
 	case "]":
-		m.otherFile(1)
+		m.otherFile(p, 1)
 		return
 	case "[":
-		m.otherFile(-1)
+		m.otherFile(p, -1)
 		return
 	}
 
 	v.clamp(m.height)
 }
 
-// otherFile opens the next or previous file of the summary list.
-func (m *Model) otherFile(delta int) {
-	var mode = m.viewer.mode
+// otherFile opens the next or previous file of the pane's table,
+// keeping the side-by-side or unified mode.
+func (m *Model) otherFile(p *pane, delta int) {
+	var mode render.Mode
 
-	m.list.move(delta)
-	m.openSelected()
-	if m.viewer != nil && m.viewer.mode != mode {
-		m.viewer.toggleMode(m.height)
-		if len(m.viewer.blocks) > 0 {
-			m.viewer.jump(0, m.height)
+	mode = p.viewer.mode
+	p.set.list.move(delta)
+	m.openSelected(p)
+
+	if p.viewer != nil && p.viewer.mode != mode {
+		p.viewer.toggleMode(m.height)
+		if len(p.viewer.blocks) > 0 {
+			p.viewer.jump(0, m.height)
 		}
 	}
 }
 
 // viewerView draws the header, the side titles, the diff and the footer.
-func (m *Model) viewerView() string {
+func (m *Model) viewerView(p *pane) string {
 	var v *viewer
 	var height int
 	var lines []string
 	var vp render.Viewport
 
-	v = m.viewer
+	v = p.viewer
 	height = bodyHeight(m.height)
 
-	lines = append(lines, m.headerLine(m.viewerTitle()))
-	lines = append(lines, m.sideTitles())
+	lines = append(lines, m.headerLine(viewerTitle(v)))
+	lines = append(lines, m.sideTitles(p))
 
 	vp = render.Viewport{Top: v.top, Height: height, Width: m.width, XOffset: v.xoff}
 	if v.current >= 0 {
@@ -263,16 +266,14 @@ func (m *Model) viewerView() string {
 		lines = append(lines, "")
 	}
 
-	lines = append(lines, m.viewerFooter())
+	lines = append(lines, m.viewerFooter(v))
 	return strings.Join(lines, "\n")
 }
 
 // viewerTitle shows the path, its counts and the change position.
-func (m *Model) viewerTitle() string {
-	var v *viewer
+func viewerTitle(v *viewer) string {
 	var pos string
 
-	v = m.viewer
 	pos = "no changes"
 	if len(v.blocks) > 0 {
 		pos = fmt.Sprintf("change %d/%d", max(v.current+1, 0), len(v.blocks))
@@ -283,33 +284,22 @@ func (m *Model) viewerTitle() string {
 }
 
 // sideTitles names the two versions above the diff.
-func (m *Model) sideTitles() string {
-	var c = m.viewer.file.Change
+func (m *Model) sideTitles(p *pane) string {
+	var c = p.viewer.file.Change
 	var oldName, newName string
 	var half int
 
-	oldName = sideName(m.baseName(), c.OldPath)
-	newName = sideName(m.targetName(), c.NewPath)
+	oldName = sideName(p.set.baseName(), c.OldPath)
+	newName = sideName(p.set.targetName(), c.NewPath)
 
 	// Unified view: one title for both.
-	if m.viewer.mode == render.Unified {
-		return m.pal.Style(m.pal.Muted, m.pal.Bg, true).Render(m.fit(" " + oldName + "  →  " + newName))
+	if p.viewer.mode == render.Unified {
+		return m.pal.Style(m.pal.Muted, m.pal.Bg, true).Render(padTo(" "+oldName+"  →  "+newName, m.width))
 	}
 
 	half = (m.width - 1) / 2
 	return m.pal.Style(m.pal.Muted, m.pal.Bg, true).Render(
 		padRight(truncate(" "+oldName, half), half) + "│" + truncate(" "+newName, half))
-}
-
-// baseName and targetName split the range description "A → B".
-func (m *Model) baseName() string {
-	base, _, _ := strings.Cut(m.rangeName, " → ")
-	return base
-}
-
-func (m *Model) targetName() string {
-	_, target, _ := strings.Cut(m.rangeName, " → ")
-	return target
 }
 
 // sideName is "HEAD: path", or a note that the file does not exist there.
@@ -321,17 +311,17 @@ func sideName(side, path string) string {
 }
 
 // viewerFooter lists the main keys of the diff screen.
-func (m *Model) viewerFooter() string {
+func (m *Model) viewerFooter(v *viewer) string {
 	var modeName string
 
 	modeName = "unified"
-	if m.viewer.mode == render.Unified {
+	if v.mode == render.Unified {
 		modeName = "side-by-side"
 	}
 
 	return m.keyHints([][2]string{
 		{"n/N", "next/prev change"}, {"j/k", "scroll"}, {"←→", "pan"},
-		{"s", modeName}, {"[ ]", "prev/next file"}, {"esc", "back"}, {"?", "help"},
+		{"s", modeName}, {"[ ]", "prev/next file"}, {"esc", "back"}, {"tab", "switch tab"}, {"?", "help"},
 	})
 }
 
@@ -345,15 +335,4 @@ func lineTexts(lines []semantic.Line) []string {
 	}
 
 	return out
-}
-
-// truncate cuts plain text to width columns.
-func truncate(s string, width int) string {
-	var runes []rune
-
-	runes = []rune(s)
-	if len(runes) > width {
-		return string(runes[:max(width-1, 0)]) + "…"
-	}
-	return s
 }

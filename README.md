@@ -80,15 +80,30 @@ single punctuation characters, so `timeout := 500 * time.Millisecond` →
 `timeout := 1000 * time.Millisecond` highlights only `500` and `1000`.
 Unknown file types are compared character by character.
 
+## Tabs
+
+godiff has two tabs, like lazygit. Each keeps its place when you switch.
+
+| Key | Tab |
+|---|---|
+| `1` | **Changes**: the comparison given on the command line |
+| `2` | **Log**: the commit history on the right; the selected commit's files (against its parent) on the left |
+| `tab` | switch between the two |
+
+In the log, `↑ ↓` moves through commits, `Enter` or `→` moves to the
+commit's files, and `Esc` or `←` goes back to the commits. A commit's
+files load in the background once the cursor stops on it. The last 1000
+commits from HEAD are listed.
+
 ## Keys
 
 Press `?` in the app for the full list.
 
-| Key | Summary | Diff viewer |
+| Key | File table | Diff viewer |
 |---|---|---|
 | `↑ ↓` / `j k` | select file | scroll |
 | `Enter` | open file | |
-| `Esc` | | back to summary |
+| `Esc` | (log) back to commits | back to the file table |
 | `n` / `N` | | next / previous change |
 | `← →` / `h l` | | scroll left / right |
 | `s` | | side-by-side or unified |

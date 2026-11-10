@@ -98,6 +98,7 @@ func run() error {
 	review.ComputeAll(files, cfg.Filters)
 
 	model := tui.New(tui.Options{
+		Repo:    repo,
 		Files:   files,
 		Range:   rg.String(),
 		Filters: cfg.Filters,
