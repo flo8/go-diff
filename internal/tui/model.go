@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 	"time"
@@ -456,16 +457,28 @@ func (m *Model) headerLine(title string) string {
 	return m.spread(left, badges)
 }
 
-// branchBadge shows the branch in mint, "detached" when HEAD is not on
-// a branch, or nothing outside a repository.
+// branchBadge shows the branch in mint, then the commits ahead of its
+// upstream (pink, like unpushed hashes) and behind it (yellow), when
+// there are any. It shows "detached" when HEAD is not on a branch, and
+// nothing outside a repository.
 func (m *Model) branchBadge() string {
+	var badge string
+
 	if m.repo == nil {
 		return ""
 	}
 	if m.status.Branch == "" {
 		return m.pal.Paint(" detached ", m.pal.Muted)
 	}
-	return m.pal.Style(m.pal.AddedFg, m.pal.Bg, true).Render(" " + m.status.Branch + " ")
+
+	badge = m.pal.Style(m.pal.AddedFg, m.pal.Bg, true).Render(" " + m.status.Branch)
+	if m.status.Ahead > 0 {
+		badge += m.pal.Paint(fmt.Sprintf(" ↑%d", m.status.Ahead), m.pal.RemovedFg)
+	}
+	if m.status.Behind > 0 {
+		badge += m.pal.Paint(fmt.Sprintf(" ↓%d", m.status.Behind), m.pal.ModifiedFg)
+	}
+	return badge + m.pal.Paint(" ", nil)
 }
 
 // filterBadges shows each filter's key and whether it is on, as

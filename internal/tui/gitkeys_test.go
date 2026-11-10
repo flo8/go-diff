@@ -114,6 +114,15 @@ func TestPushSetsUpstream(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.mainView()), "main → origin/main") {
 		t.Errorf("history title should show the upstream")
 	}
+
+	// One more commit: the header shows it as ahead.
+	press(m, "a")
+	press(m, "c")
+	send(m, tea.PasteMsg{Content: "update b"})
+	enter(m)
+	if !strings.Contains(ansi.Strip(m.headerLine("x")), " godiff  main ↑1 ") {
+		t.Errorf("header should show 1 ahead: %q", ansi.Strip(m.headerLine("x")))
+	}
 	out, _ := exec.Command("git", "-C", bare, "log", "-1", "--format=%s").Output()
 	if strings.TrimSpace(string(out)) != "add b" {
 		t.Errorf("remote head = %q", out)
