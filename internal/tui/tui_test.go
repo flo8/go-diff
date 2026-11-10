@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -280,20 +281,28 @@ func TestTotalsOnlyWithoutHistory(t *testing.T) {
 }
 
 // Scenario: nothing loaded yet, the cursor on the second commit.
-// Goal: the selected commit is loaded first; with "current" selected,
-// the first visible commit is; a stale tick starts nothing.
+// Goal: the selected commit is loaded first, then the other visible
+// ones, without duplicates and at most n; with "current" selected, the
+// visible commits from the top; a stale tick starts nothing.
 func TestLoadOrder(t *testing.T) {
 	m := newTestModel(t, false)
-	m.hist.loading = "" // the startup load was not run
+	m.hist.loading = map[string]bool{} // the startup loads were not run
+	c := m.hist.commits
 
 	m.hist.selected = 2
-	if got := m.wantedCommit(); got != m.hist.commits[1].Hash {
-		t.Errorf("wanted %q, want the selected commit %q", got, m.hist.commits[1].Hash)
+	got := m.wantedCommits(maxLoads)
+	want := []string{c[1].Hash, c[0].Hash, c[2].Hash}
+	if !slices.Equal(got, want) {
+		t.Errorf("wanted %v, want selected first then visible %v", got, want)
+	}
+	if got := m.wantedCommits(1); !slices.Equal(got, want[:1]) {
+		t.Errorf("wanted %v, want only the selected commit", got)
 	}
 
 	m.hist.selected = 0
-	if got := m.wantedCommit(); got != m.hist.commits[0].Hash {
-		t.Errorf("wanted %q, want the first visible commit", got)
+	m.hist.loading[c[0].Hash] = true
+	if got := m.wantedCommits(maxLoads); !slices.Equal(got, []string{c[1].Hash, c[2].Hash}) {
+		t.Errorf("wanted %v, want the visible commits not already loading", got)
 	}
 
 	m.hist.seq = 5

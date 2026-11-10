@@ -95,6 +95,7 @@ func New(opt Options) *Model {
 	m.files = pane{set: m.current}
 	m.hist.cache = map[string]*changeSet{}
 	m.hist.loadErr = map[string]error{}
+	m.hist.loading = map[string]bool{}
 	if m.repo != nil {
 		m.hist.commits, m.hist.err = m.repo.Log(logLimit)
 		m.status, _ = m.repo.Status()

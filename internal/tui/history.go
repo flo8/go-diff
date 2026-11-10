@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ const (
 	logLimit      = 1000                   // commits listed in the history
 	loadDelay     = 120 * time.Millisecond // wait for the cursor to stop before loading
 	maxCached     = 64                     // commits kept in memory
+	maxLoads      = 8                      // commits loading at the same time
 	hashColWidth  = 9
 	dateColWidth  = 15
 	authColWidth  = 14
@@ -39,7 +41,7 @@ type history struct {
 	cache   map[string]*changeSet // loaded commits by hash
 	loadErr map[string]error      // commits that failed to load
 	seq     int                   // increases each time the selection moves
-	loading string                // hash being loaded, "" when idle
+	loading map[string]bool       // hashes being loaded
 }
 
 // entries is the number of rows: "current" plus the commits.
@@ -137,29 +139,29 @@ func (m *Model) startLoad(t loadTick) tea.Cmd {
 	return m.nextLoad()
 }
 
-// nextLoad starts loading one commit, if none is loading: the selected
-// commit first, then the visible rows from the top, so that every row
-// on screen gets its counts. Loads run one at a time.
+// nextLoad starts loading commits, up to maxLoads at the same time: the
+// selected commit first, then the visible rows from the top, so that
+// every row on screen gets its counts.
 func (m *Model) nextLoad() tea.Cmd {
-	var hash string
+	var cmds []tea.Cmd
 
-	if m.hist.loading != "" || m.repo == nil {
+	if m.repo == nil {
 		return nil
 	}
 
-	hash = m.wantedCommit()
-	if hash == "" {
-		return nil
+	for _, hash := range m.wantedCommits(maxLoads - len(m.hist.loading)) {
+		m.hist.loading[hash] = true
+		cmds = append(cmds, loadJob{repo: m.repo, hash: hash, filters: m.filters}.run)
 	}
-
-	m.hist.loading = hash
-	return loadJob{repo: m.repo, hash: hash, filters: m.filters}.run
+	return tea.Batch(cmds...)
 }
 
-// wantedCommit returns the next commit to load, or "" when every
-// visible commit is loaded (or failed).
-func (m *Model) wantedCommit() string {
+// wantedCommits returns up to n commits to load next, in order: the
+// selected one, then the visible ones. Commits already loaded, loading
+// or failed are skipped.
+func (m *Model) wantedCommits(n int) []string {
 	var candidates []string
+	var wanted []string
 
 	commit, isCommit := m.hist.selectedCommit()
 	if isCommit {
@@ -168,11 +170,17 @@ func (m *Model) wantedCommit() string {
 	candidates = append(candidates, m.visibleCommits()...)
 
 	for _, hash := range candidates {
-		if m.hist.cache[hash] == nil && m.hist.loadErr[hash] == nil {
-			return hash
+		if len(wanted) >= n {
+			break
+		}
+		if m.hist.cache[hash] != nil || m.hist.loadErr[hash] != nil || m.hist.loading[hash] {
+			continue
+		}
+		if !slices.Contains(wanted, hash) {
+			wanted = append(wanted, hash)
 		}
 	}
-	return ""
+	return wanted
 }
 
 // visibleCommits returns the hashes of the commits on screen.
@@ -186,12 +194,12 @@ func (m *Model) visibleCommits() []string {
 }
 
 // finishLoad stores a loaded commit, shows it if it is selected, and
-// starts the next load.
+// starts the next loads.
 func (m *Model) finishLoad(msg commitLoaded) tea.Cmd {
 	var commit git.Commit
 	var isCommit bool
 
-	m.hist.loading = ""
+	delete(m.hist.loading, msg.hash)
 
 	if msg.err != nil {
 		m.hist.loadErr[msg.hash] = msg.err

@@ -4,6 +4,8 @@ package review
 
 import (
 	"bytes"
+	"runtime"
+	"sync"
 
 	"github.com/flo8/go-diff/internal/diff"
 	"github.com/flo8/go-diff/internal/git"
@@ -58,9 +60,32 @@ func Load(repo *git.Repo, rg git.Range) ([]*File, error) {
 	return files, nil
 }
 
-// ComputeAll recomputes every file under the filters.
+// ComputeAll recomputes every file under the filters, several files at
+// a time: files do not depend on each other and the work is CPU-bound.
 func ComputeAll(files []*File, f semantic.Filters) {
+	var work chan *File
+	var wg sync.WaitGroup
+	var workers int
+
+	workers = min(runtime.GOMAXPROCS(0), len(files))
+	work = make(chan *File)
+
+	wg.Add(workers)
+	for range workers {
+		go computeFiles(work, f, &wg)
+	}
+
 	for _, file := range files {
+		work <- file
+	}
+	close(work)
+	wg.Wait()
+}
+
+// computeFiles computes the files it receives until work is closed.
+func computeFiles(work <-chan *File, f semantic.Filters, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for file := range work {
 		file.Compute(f)
 	}
 }
