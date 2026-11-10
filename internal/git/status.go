@@ -17,12 +17,13 @@ const (
 
 // WorkStatus is the branch and the staging state of each changed file.
 type WorkStatus struct {
-	Branch   string           // "" when HEAD is detached
-	Upstream string           // "origin/main", or "" when there is none
-	Ahead    int              // commits on the branch, not on the upstream
-	Behind   int              // commits on the upstream, not on the branch
-	Stashes  int              // entries in the stash
-	Files    map[string]Stage // by path; files without changes are absent
+	Branch    string           // "" when HEAD is detached
+	Upstream  string           // "origin/main", or "" when there is none
+	Ahead     int              // commits on the branch, not on the upstream
+	Behind    int              // commits on the upstream, not on the branch
+	Stashes   int              // entries in the stash
+	Untracked int              // new files git does not track yet
+	Files     map[string]Stage // by path; files without changes are absent
 }
 
 // Status reads the branch and the staging state of every changed file
@@ -93,6 +94,7 @@ func parseStatusLine(line string, st *WorkStatus) {
 		st.Files[fields[10]] = Unstaged
 	case strings.HasPrefix(line, "? "):
 		st.Files[strings.TrimPrefix(line, "? ")] = Unstaged
+		st.Untracked++
 	}
 }
 

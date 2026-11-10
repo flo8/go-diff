@@ -458,8 +458,8 @@ func (m *Model) headerLine(title string) string {
 }
 
 // branchBadge shows the branch in mint, then the commits ahead of its
-// upstream (pink, like unpushed hashes) and behind it (yellow), and the
-// number of stashes (muted), when there are any. It shows "detached" when HEAD is not on a branch, and
+// upstream (pink, like unpushed hashes) and behind it (yellow), the
+// number of stashes and of untracked files (muted), when there are any. It shows "detached" when HEAD is not on a branch, and
 // nothing outside a repository.
 func (m *Model) branchBadge() string {
 	var badge string
@@ -480,6 +480,9 @@ func (m *Model) branchBadge() string {
 	}
 	if m.status.Stashes > 0 {
 		badge += m.pal.Paint(fmt.Sprintf(" ≡%d", m.status.Stashes), m.pal.Muted)
+	}
+	if m.status.Untracked > 0 {
+		badge += m.pal.Paint(fmt.Sprintf(" ?%d", m.status.Untracked), m.pal.Muted)
 	}
 	return badge + m.pal.Paint(" ", nil)
 }

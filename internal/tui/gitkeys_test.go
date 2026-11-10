@@ -2,7 +2,9 @@ package tui
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -154,6 +156,20 @@ func TestHeaderStashes(t *testing.T) {
 	m.reloadStatus()
 	if !strings.Contains(ansi.Strip(m.headerLine("x")), " godiff  main ≡1 ") {
 		t.Errorf("header should show 1 stash: %q", ansi.Strip(m.headerLine("x")))
+	}
+}
+
+// Scenario: add two files git does not track.
+// Goal: the header shows 2 untracked files next to the branch.
+func TestHeaderUntracked(t *testing.T) {
+	m := newTestModel(t, true)
+
+	runGit(t, m.repo.Root, "checkout", "-q", "b.go")
+	os.WriteFile(filepath.Join(m.repo.Root, "c.go"), []byte("package a\n"), 0o644)
+	os.WriteFile(filepath.Join(m.repo.Root, "d.go"), []byte("package a\n"), 0o644)
+	m.reloadStatus()
+	if !strings.Contains(ansi.Strip(m.headerLine("x")), " godiff  main ?2 ") {
+		t.Errorf("header should show 2 untracked: %q", ansi.Strip(m.headerLine("x")))
 	}
 }
 

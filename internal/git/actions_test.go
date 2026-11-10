@@ -119,6 +119,9 @@ func TestStatusStages(t *testing.T) {
 	if st.Stashes != 0 {
 		t.Errorf("stashes = %d, want 0", st.Stashes)
 	}
+	if st.Untracked != 1 {
+		t.Errorf("untracked = %d, want 1 (sub/new.txt)", st.Untracked)
+	}
 }
 
 // Scenario: stash a change twice.
