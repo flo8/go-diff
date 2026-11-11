@@ -368,9 +368,8 @@ func TestFilterToggleRecomputesShown(t *testing.T) {
 }
 
 // Scenario: a working tree with three changed files: b.go (1 changed
-// line), c.go (4) and d.go (2); then o, then a commit shown after o.
-// Goal: the table starts sorted by changed lines (c, d, b); o sorts by
-// name, and other history entries follow the same order.
+// line), c.go (4) and d.go (2).
+// Goal: the table is sorted by changed lines, most first (c, d, b).
 func TestSortByChanges(t *testing.T) {
 	m := newTestModel(t, true)
 	dir := m.repo.Root
@@ -380,18 +379,6 @@ func TestSortByChanges(t *testing.T) {
 
 	if got := strings.Join(selectedPaths(m), " "); got != "c.go d.go b.go" {
 		t.Errorf("by changes: %s, want c.go d.go b.go", got)
-	}
-
-	press(m, "o")
-	if got := strings.Join(selectedPaths(m), " "); got != "b.go c.go d.go" {
-		t.Errorf("by name: %s, want b.go c.go d.go", got)
-	}
-
-	// A commit shown after o is sorted by name too.
-	press(m, "tab")
-	press(m, "down")
-	if m.files.set.list.sortByChanges {
-		t.Errorf("commit tables should follow o")
 	}
 }
 

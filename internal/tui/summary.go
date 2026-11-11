@@ -22,13 +22,12 @@ const (
 
 // fileList is the state of a file table.
 type fileList struct {
-	visible       []*review.File // files with meaningful changes, sorted
-	hidden        int            // files changed only in ignored ways
-	sortByChanges bool
-	grouped       bool            // go, tests, other: see groups.go
-	groupFiles    [groupCount]int // number of visible files in each group
-	selected      int
-	top           int // first visible row when the list scrolls
+	visible    []*review.File  // files with meaningful changes, sorted
+	hidden     int             // files changed only in ignored ways
+	grouped    bool            // go, tests, other: see groups.go
+	groupFiles [groupCount]int // number of visible files in each group
+	selected   int
+	top        int // first visible row when the list scrolls
 }
 
 // refresh rebuilds the visible list, keeping the selected file if it is
@@ -64,7 +63,7 @@ func (l *fileList) refresh(files []*review.File) {
 	}
 }
 
-// sort orders by path, or by number of changes (most first); when
+// sort orders by number of changes (most first), then by path; when
 // grouped, by group first.
 func (l *fileList) sort() {
 	sort.SliceStable(l.visible, l.less)
@@ -83,10 +82,7 @@ func (l *fileList) less(i, j int) bool {
 		}
 	}
 
-	if l.sortByChanges {
-		return l.byChanges(i, j)
-	}
-	return l.byPath(i, j)
+	return l.byChanges(i, j)
 }
 
 func (l *fileList) byPath(i, j int) bool {
@@ -139,11 +135,8 @@ func (m *Model) fileListKey(p *pane, key string) {
 	case "end", "G":
 		l.move(len(l.visible))
 	case "o":
-		m.sortByChanges = !m.sortByChanges
-		m.applySort(p.set)
-	case "O":
 		m.groupByKind = !m.groupByKind
-		m.applySort(p.set)
+		m.applyGrouping(p.set)
 	case "enter", "l", "right":
 		m.openSelected(p)
 	}

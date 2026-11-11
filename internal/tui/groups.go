@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// fileGroup is the kind of a file when the tables are grouped (O):
+// fileGroup is the kind of a file when the tables are grouped (o):
 // Go code first, then Go tests, then everything else.
 type fileGroup int
 

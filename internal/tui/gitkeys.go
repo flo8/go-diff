@@ -343,7 +343,7 @@ func (m *Model) applyRefresh(msg refreshed) tea.Cmd {
 	}
 
 	commit, isCommit = m.hist.selectedCommit()
-	m.applySort(msg.set)
+	m.applyGrouping(msg.set)
 	keepSelection(&m.current.list, &msg.set.list)
 	m.current = msg.set
 	m.hist.commits = msg.commits

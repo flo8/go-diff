@@ -34,10 +34,11 @@ func tableText(m *Model, height int) []string {
 }
 
 // Scenario: a working tree with b.go (1 changed line), c.go (5 new),
-// z_test.go (10 new) and notes.md (3 new); then O, then o.
-// Goal: grouping is off at first; O puts go files, then tests, then
-// other files, keeping the sort order inside each group, and o still
-// switches that order.
+// z_test.go (10 new) and notes.md (3 new); then o, a commit, and o
+// again.
+// Goal: grouping is off at first; o puts go files, then tests, then
+// other files, still sorted by changed lines inside each group; commit
+// tables follow; a second o turns grouping off.
 func TestGroupByKindOrder(t *testing.T) {
 	m := newTestModel(t, true)
 	writeFiles(t, m.repo.Root, map[string]int{"c.go": 5, "z_test.go": 10, "notes.md": 3})
@@ -47,19 +48,22 @@ func TestGroupByKindOrder(t *testing.T) {
 		t.Errorf("ungrouped: %s, want z_test.go c.go notes.md b.go", got)
 	}
 
-	press(m, "O")
-	if got := strings.Join(selectedPaths(m), " "); got != "c.go b.go z_test.go notes.md" {
-		t.Errorf("grouped by changes: %s, want c.go b.go z_test.go notes.md", got)
-	}
-
 	press(m, "o")
-	if got := strings.Join(selectedPaths(m), " "); got != "b.go c.go z_test.go notes.md" {
-		t.Errorf("grouped by name: %s, want b.go c.go z_test.go notes.md", got)
+	if got := strings.Join(selectedPaths(m), " "); got != "c.go b.go z_test.go notes.md" {
+		t.Errorf("grouped: %s, want c.go b.go z_test.go notes.md", got)
 	}
 
-	press(m, "O")
+	// A commit shown after o is grouped too.
+	press(m, "tab")
+	press(m, "down")
+	if !m.files.set.list.grouped {
+		t.Errorf("commit tables should follow o")
+	}
+
+	press(m, "tab")
+	press(m, "o")
 	if m.files.set.list.grouped {
-		t.Errorf("second O should turn grouping off")
+		t.Errorf("second o should turn grouping off")
 	}
 }
 
@@ -77,7 +81,7 @@ func TestGroupSeparators(t *testing.T) {
 		}
 	}
 
-	press(m, "O")
+	press(m, "o")
 	lines := tableText(m, 20)
 	want := []string{"go (2)", "c.go", "b.go", "tests (1)", "z_test.go", "other (1)", "notes.md"}
 
@@ -103,7 +107,7 @@ func TestGroupScrollKeepsSelection(t *testing.T) {
 	}
 	writeFiles(t, m.repo.Root, files)
 	m = reopen(t, m)
-	press(m, "O")
+	press(m, "o")
 
 	keys := append(strings.Split(strings.Repeat("j", 16), ""), strings.Split(strings.Repeat("k", 16), "")...)
 	for step, key := range keys {
@@ -118,3 +122,5 @@ func TestGroupScrollKeepsSelection(t *testing.T) {
 		}
 	}
 }
+
+// tmp

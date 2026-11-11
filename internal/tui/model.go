@@ -47,14 +47,13 @@ type Model struct {
 	autoTheme bool
 	pal       *render.Palette
 
-	current       *changeSet // the comparison given on the command line
-	hist          history
-	files         pane // the selected history entry's files and open viewer
-	focus         focusArea
-	showHistory   bool
-	sortByChanges bool // file tables sort by changed lines, else by name
-	groupByKind   bool // file tables group go, tests and other files
-	help          bool
+	current     *changeSet // the comparison given on the command line
+	hist        history
+	files       pane // the selected history entry's files and open viewer
+	focus       focusArea
+	showHistory bool
+	groupByKind bool // file tables group go, tests and other files
+	help        bool
 
 	// Changing the repository: see gitkeys.go and job.go.
 	rangeOpts    git.Options
@@ -78,16 +77,15 @@ func New(opt Options) *Model {
 	var m *Model
 
 	m = &Model{
-		repo:          opt.Repo,
-		filters:       opt.Filters,
-		themes:        opt.Themes,
-		autoTheme:     opt.Theme == "",
-		showHistory:   true,
-		sortByChanges: true,
-		rangeOpts:     opt.RangeOpts,
-		canStage:      isWorktreeRange(opt.RangeOpts),
-		resultDelay:   resultDelay,
-		refreshEvery:  autoRefreshDelay,
+		repo:         opt.Repo,
+		filters:      opt.Filters,
+		themes:       opt.Themes,
+		autoTheme:    opt.Theme == "",
+		showHistory:  true,
+		rangeOpts:    opt.RangeOpts,
+		canStage:     isWorktreeRange(opt.RangeOpts),
+		resultDelay:  resultDelay,
+		refreshEvery: autoRefreshDelay,
 	}
 
 	m.themeIdx = themeIndex(m.themes, opt.Theme)
@@ -95,7 +93,7 @@ func New(opt Options) *Model {
 
 	// "current" is selected first; commits load when selected.
 	m.current = newChangeSet(opt.Files, opt.Range, opt.Filters)
-	m.applySort(m.current)
+	m.applyGrouping(m.current)
 	m.files = pane{set: m.current}
 	m.hist.cache = map[string]*changeSet{}
 	m.hist.loadErr = map[string]error{}
@@ -437,19 +435,10 @@ func (m *Model) mainFooter() string {
 		hints = append(hints, [2]string{"space/a", "stage"})
 	}
 	hints = append(hints, [][2]string{
-		{"c", "commit"}, {"p/P", "pull/push"}, {"o", "sort: " + m.sortName()},
-		{"O", "group: " + onOff(m.groupByKind)},
+		{"c", "commit"}, {"p/P", "pull/push"}, {"o", "group: " + onOff(m.groupByKind)},
 		{"tab", "history"}, historyKey, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
 	}...)
 	return m.keyHints(hints)
-}
-
-// sortName names the sort order of the file tables.
-func (m *Model) sortName() string {
-	if m.sortByChanges {
-		return "changes"
-	}
-	return "name"
 }
 
 // onOff names the state of a switch.
@@ -460,14 +449,13 @@ func onOff(on bool) string {
 	return "off"
 }
 
-// applySort sorts and groups a file table the way all of them are, when
-// it is shown. Each loaded commit keeps its own table, so it may have
-// been sorted before o or O was pressed.
-func (m *Model) applySort(s *changeSet) {
-	if s.list.sortByChanges == m.sortByChanges && s.list.grouped == m.groupByKind {
+// applyGrouping groups a file table the way all of them are, when it
+// is shown. Each loaded commit keeps its own table, so it may have been
+// sorted before o was pressed.
+func (m *Model) applyGrouping(s *changeSet) {
+	if s.list.grouped == m.groupByKind {
 		return
 	}
-	s.list.sortByChanges = m.sortByChanges
 	s.list.grouped = m.groupByKind
 	s.list.refresh(s.files)
 }
