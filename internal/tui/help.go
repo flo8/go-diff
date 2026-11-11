@@ -39,7 +39,7 @@ var helpSections = []struct {
 		{"↑ ↓  j k", "select a file"},
 		{"PgUp PgDn  g G", "page up / down, first / last"},
 		{"Enter", "open the selected file"},
-		{"o", "group by go files, tests and other files (on/off)"},
+		{"o", "group by go files, tests and other files (default) or not"},
 	}},
 	{"Diff viewer", [][2]string{
 		{"n  N", "next / previous change"},

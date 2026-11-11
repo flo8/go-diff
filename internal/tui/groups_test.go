@@ -36,52 +36,47 @@ func tableText(m *Model, height int) []string {
 // Scenario: a working tree with b.go (1 changed line), c.go (5 new),
 // z_test.go (10 new) and notes.md (3 new); then o, a commit, and o
 // again.
-// Goal: grouping is off at first; o puts go files, then tests, then
-// other files, still sorted by changed lines inside each group; commit
-// tables follow; a second o turns grouping off.
+// Goal: grouping is on at first: go files, then tests, then other
+// files, sorted by changed lines inside each group; o turns it off and
+// sorts by changed lines only; commit tables follow; a second o turns
+// grouping back on.
 func TestGroupByKindOrder(t *testing.T) {
 	m := newTestModel(t, true)
 	writeFiles(t, m.repo.Root, map[string]int{"c.go": 5, "z_test.go": 10, "notes.md": 3})
 	m = reopen(t, m)
 
-	if got := strings.Join(selectedPaths(m), " "); got != "z_test.go c.go notes.md b.go" {
-		t.Errorf("ungrouped: %s, want z_test.go c.go notes.md b.go", got)
-	}
-
-	press(m, "o")
 	if got := strings.Join(selectedPaths(m), " "); got != "c.go b.go z_test.go notes.md" {
 		t.Errorf("grouped: %s, want c.go b.go z_test.go notes.md", got)
 	}
 
-	// A commit shown after o is grouped too.
+	press(m, "o")
+	if got := strings.Join(selectedPaths(m), " "); got != "z_test.go c.go notes.md b.go" {
+		t.Errorf("ungrouped: %s, want z_test.go c.go notes.md b.go", got)
+	}
+
+	// A commit shown after o is not grouped either.
 	press(m, "tab")
 	press(m, "down")
-	if !m.files.set.list.grouped {
+	if m.files.set.list.grouped {
 		t.Errorf("commit tables should follow o")
 	}
 
 	press(m, "tab")
 	press(m, "o")
-	if m.files.set.list.grouped {
-		t.Errorf("second o should turn grouping off")
+	if !m.files.set.list.grouped {
+		t.Errorf("second o should turn grouping back on")
 	}
 }
 
-// Scenario: the same working tree, grouped, drawn in a tall table.
+// Scenario: the same working tree drawn in a tall table, grouped (the
+// default), then after o.
 // Goal: each group has a separator with its file count right above its
-// first file; an ungrouped table has none.
+// first file; the ungrouped table has none.
 func TestGroupSeparators(t *testing.T) {
 	m := newTestModel(t, true)
 	writeFiles(t, m.repo.Root, map[string]int{"c.go": 5, "z_test.go": 10, "notes.md": 3})
 	m = reopen(t, m)
 
-	for _, l := range tableText(m, 20) {
-		if strings.Contains(l, "──") && strings.Contains(l, "(") {
-			t.Errorf("ungrouped table has a separator: %q", l)
-		}
-	}
-
-	press(m, "o")
 	lines := tableText(m, 20)
 	want := []string{"go (2)", "c.go", "b.go", "tests (1)", "z_test.go", "other (1)", "notes.md"}
 
@@ -89,6 +84,13 @@ func TestGroupSeparators(t *testing.T) {
 	for i, w := range want {
 		if !strings.Contains(lines[i+2], w) {
 			t.Errorf("row %d: %q, want it to contain %q", i, lines[i+2], w)
+		}
+	}
+
+	press(m, "o")
+	for _, l := range tableText(m, 20) {
+		if strings.Contains(l, "──") && strings.Contains(l, "(") {
+			t.Errorf("ungrouped table has a separator: %q", l)
 		}
 	}
 }
@@ -107,7 +109,6 @@ func TestGroupScrollKeepsSelection(t *testing.T) {
 	}
 	writeFiles(t, m.repo.Root, files)
 	m = reopen(t, m)
-	press(m, "o")
 
 	keys := append(strings.Split(strings.Repeat("j", 16), ""), strings.Split(strings.Repeat("k", 16), "")...)
 	for step, key := range keys {

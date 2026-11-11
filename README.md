@@ -146,7 +146,7 @@ Press `?` in the app for the full list.
 | `← →` / `h l` | | scroll left / right |
 | `s` | | side-by-side or unified |
 | `[` / `]` | | previous / next file |
-| `o` | group by go files, tests and other files (off by default) | |
+| `o` | group by go files, tests and other files (on by default) | |
 | `F` then `c w f i` | toggle filters | toggle filters |
 | `space` / `a` | stage file / all | |
 | `c` / `C` | commit | commit |

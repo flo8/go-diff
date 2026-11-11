@@ -82,6 +82,7 @@ func New(opt Options) *Model {
 		themes:       opt.Themes,
 		autoTheme:    opt.Theme == "",
 		showHistory:  true,
+		groupByKind:  true,
 		rangeOpts:    opt.RangeOpts,
 		canStage:     isWorktreeRange(opt.RangeOpts),
 		resultDelay:  resultDelay,
