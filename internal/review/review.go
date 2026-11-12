@@ -28,6 +28,7 @@ type File struct {
 	NewLines []semantic.Line
 	Rows     []diff.Row
 	Counts   diff.Counts
+	Funcs    int // Go functions with a changed line; 0 for other files
 }
 
 // Load lists the changes in rg and reads both versions of every file.
@@ -94,6 +95,7 @@ func computeFiles(work <-chan *File, f semantic.Filters, wg *sync.WaitGroup) {
 // Binary files are not compared.
 func (file *File) Compute(f semantic.Filters) {
 	var oldPath, newPath string
+	var oldFuncs, newFuncs []semantic.Func
 
 	if file.Binary {
 		return
@@ -107,6 +109,14 @@ func (file *File) Compute(f semantic.Filters) {
 
 	file.Rows = diff.Align(side(file.OldLines), side(file.NewLines))
 	file.Counts = diff.Count(file.Rows)
+
+	// Skip parsing when every change was filtered out.
+	file.Funcs = 0
+	if file.Counts.Total() > 0 {
+		oldFuncs = semantic.GoFuncs(oldPath, file.Old)
+		newFuncs = semantic.GoFuncs(newPath, file.New)
+		file.Funcs = countChangedFuncs(file.Rows, oldFuncs, newFuncs)
+	}
 }
 
 // Meaningful reports whether the file belongs in the summary: it has

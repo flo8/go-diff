@@ -54,6 +54,17 @@ func (s *changeSet) totals() diff.Counts {
 	return total
 }
 
+// funcTotal sums the changed functions of the files shown in the table.
+func (s *changeSet) funcTotal() int {
+	var total int
+
+	for _, f := range s.list.visible {
+		total += f.Funcs
+	}
+
+	return total
+}
+
 // baseName and targetName split the range description "A → B".
 func (s *changeSet) baseName() string {
 	base, _, _ := strings.Cut(s.rangeName, " → ")

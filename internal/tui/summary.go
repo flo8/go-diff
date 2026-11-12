@@ -20,6 +20,12 @@ const (
 	tableChrome     = 2 // column titles and rule
 )
 
+// tableCols are the optional columns of a file table.
+type tableCols struct {
+	staging bool // staging marks, on "current" when it can be staged
+	funcs   bool // changed Go functions, on "current" only
+}
+
 // fileList is the state of a file table.
 type fileList struct {
 	visible    []*review.File  // files with meaningful changes, sorted
@@ -158,11 +164,12 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 	var lines []string
 	var footer int
 	var rows int
-	var staging bool
+	var cols tableCols
 	var f *review.File
 	var g fileGroup
 
-	staging = s == m.current && m.canStage && m.repo != nil
+	cols.staging = s == m.current && m.canStage && m.repo != nil
+	cols.funcs = s == m.current
 	footer = 0
 	if withTotals {
 		footer = 2
@@ -177,7 +184,7 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 		s.list.scroll(rows)
 	}
 
-	lines = append(lines, m.tableTitles(width, staging))
+	lines = append(lines, m.tableTitles(width, cols))
 	lines = append(lines, m.rule(width))
 
 	for i := s.list.top; i < len(s.list.visible) && len(lines) < rows+2; i++ {
@@ -189,7 +196,7 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 			lines = append(lines, m.groupSeparator(g, s.list.groupFiles[g], width))
 		}
 		if len(lines) < rows+2 {
-			lines = append(lines, m.fileRow(f, staging, i == s.list.selected, focused, width))
+			lines = append(lines, m.fileRow(f, cols, i == s.list.selected, focused, width))
 		}
 	}
 
@@ -205,29 +212,38 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 
 	if withTotals {
 		lines = append(lines, m.rule(width))
-		lines = append(lines, m.totalsRow(s, width))
+		lines = append(lines, m.totalsRow(s, cols, width))
 	}
 
 	return lines
 }
 
 // nameColWidth is what remains of the width for the file names.
-func nameColWidth(width int) int {
-	return max(width-2-3*numColWidth-detailsColWidth-2, 10)
+func nameColWidth(width int, cols tableCols) int {
+	var numCols int
+
+	numCols = 3
+	if cols.funcs {
+		numCols++
+	}
+	return max(width-2-numCols*numColWidth-detailsColWidth-2, 10)
 }
 
 // tableTitles draws the column titles; with staging, a narrow column
 // for the staging marks comes first.
-func (m *Model) tableTitles(width int, staging bool) string {
+func (m *Model) tableTitles(width int, cols tableCols) string {
 	var b strings.Builder
 
 	b.WriteString("  ")
-	if staging {
+	if cols.staging {
 		b.WriteString("  ")
 	}
 	b.WriteString(padLeft("Removed", numColWidth))
 	b.WriteString(padLeft("Added", numColWidth))
 	b.WriteString(padLeft("Modified", numColWidth))
+	if cols.funcs {
+		b.WriteString(padLeft("Funcs", numColWidth))
+	}
 	b.WriteString("  ")
 	b.WriteString(padRight("Details", detailsColWidth))
 	b.WriteString("Filename")
@@ -251,9 +267,8 @@ func (m *Model) stageMark(f *review.File) (string, color.Color) {
 	return "○ ", m.pal.Muted
 }
 
-// fileRow draws one file of the table, after its staging mark when
-// staging is set.
-func (m *Model) fileRow(f *review.File, staging, selected, focused bool, width int) string {
+// fileRow draws one file of the table, with the optional columns in cols.
+func (m *Model) fileRow(f *review.File, cols tableCols, selected, focused bool, width int) string {
 	var highlight bool
 	var bg color.Color
 	var marker string
@@ -275,15 +290,18 @@ func (m *Model) fileRow(f *review.File, staging, selected, focused bool, width i
 	// Counts first, then the kind of change, then the name, so the eye
 	// stays on the left side of the screen.
 	b.WriteString(m.pal.Style(m.pal.Header, bg, true).Render(marker))
-	if staging {
+	if cols.staging {
 		mark, fg := m.stageMark(f)
 		b.WriteString(m.pal.Style(fg, bg, false).Render(mark))
 	}
 	b.WriteString(m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(counts[0], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.AddedFg, bg, false).Render(padLeft(counts[1], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(counts[2], numColWidth)))
+	if cols.funcs {
+		b.WriteString(m.pal.Style(m.pal.Fg, bg, false).Render(padLeft(funcsText(f), numColWidth)))
+	}
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render("  " + padRight(details(f, highlight), detailsColWidth)))
-	b.WriteString(m.pal.Style(m.pal.Fg, bg, highlight).Render(displayName(f.Change, nameColWidth(width))))
+	b.WriteString(m.pal.Style(m.pal.Fg, bg, highlight).Render(displayName(f.Change, nameColWidth(width, cols))))
 
 	return m.padLine(b.String(), bg, width)
 }
@@ -301,7 +319,7 @@ func (m *Model) padLine(line string, bg color.Color, width int) string {
 }
 
 // totalsRow sums the counts of the visible files.
-func (m *Model) totalsRow(s *changeSet, width int) string {
+func (m *Model) totalsRow(s *changeSet, cols tableCols, width int) string {
 	var total diff.Counts
 	var label string
 	var b strings.Builder
@@ -319,6 +337,9 @@ func (m *Model) totalsRow(s *changeSet, width int) string {
 	b.WriteString(m.pal.Style(m.pal.RemovedFg, m.pal.Bg, true).Render(padLeft(fmt.Sprint(total.Removed), numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.AddedFg, m.pal.Bg, true).Render(padLeft(fmt.Sprint(total.Added), numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.ModifiedFg, m.pal.Bg, true).Render(padLeft(fmt.Sprint(total.Modified), numColWidth)))
+	if cols.funcs {
+		b.WriteString(m.pal.Style(m.pal.Fg, m.pal.Bg, true).Render(padLeft(fmt.Sprint(s.funcTotal()), numColWidth)))
+	}
 	b.WriteString(m.pal.Style(m.pal.Fg, m.pal.Bg, true).Render("  " + label))
 
 	return padTo(b.String(), width)
@@ -334,6 +355,15 @@ func countTexts(f *review.File) [3]string {
 		fmt.Sprint(f.Counts.Added),
 		fmt.Sprint(f.Counts.Modified),
 	}
+}
+
+// funcsText is the number of changed functions of a Go file, and
+// nothing for other files.
+func funcsText(f *review.File) string {
+	if groupOf(f.Change.Path()) == groupOther {
+		return ""
+	}
+	return fmt.Sprint(f.Funcs)
 }
 
 // details describes the kind of change; the highlighted row shows the

@@ -78,6 +78,13 @@ Counting: inside each run of changed lines, the k-th removed line is
 paired with the k-th added line and counted as one *modified* line. The
 rest are *removed* or *added*.
 
+The `current` table also has a *Funcs* column: for each Go file, the
+number of top-level functions and methods with at least one changed
+line. It uses the same filters, so a function that only got new
+comments, blank lines or spacing does not count. A modified line counts
+for the function in the new version, so renaming a function counts it
+once. Lines outside functions (types, vars, imports) do not count.
+
 Word highlighting splits lines into identifiers, numbers, whitespace and
 single punctuation characters, so `timeout := 500 * time.Millisecond` →
 `timeout := 1000 * time.Millisecond` highlights only `500` and `1000`.
