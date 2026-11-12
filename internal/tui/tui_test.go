@@ -344,7 +344,7 @@ func TestHistoryRowTotals(t *testing.T) {
 		t.Errorf("current totals = %+v, want 1 modified", got)
 	}
 	row := ansi.Strip(m.historyRow(2))
-	if !strings.Contains(row, "    1 file     0     0     1     0  change a") {
+	if !strings.Contains(row, "    1 file     0     0     1     0     1  change a") {
 		t.Errorf("row = %q", row)
 	}
 }

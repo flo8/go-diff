@@ -85,6 +85,11 @@ comments, blank lines or spacing does not count. A modified line counts
 for the function in the new version, so renaming a function counts it
 once. Lines outside functions (types, vars, imports) do not count.
 
+The *Package* column shows each file's directory (`.` at the top of the
+repository), and *Filename* only its base name. The totals count the
+changed packages: the directories with a changed `.go` file, tests
+included.
+
 Word highlighting splits lines into identifiers, numbers, whitespace and
 single punctuation characters, so `timeout := 500 * time.Millisecond` →
 `timeout := 1000 * time.Millisecond` highlights only `500` and `1000`.
@@ -103,7 +108,7 @@ shows its files, compared with its parent, in the table above.
 | `L` | show / hide the history panel |
 
 Each row shows the commit's number of files and its removed, added,
-modified and Funcs totals, with the same filters as the file table. Commits load
+modified, Funcs and packages totals, with the same filters as the file table. Commits load
 in the background, one at a time: the selected commit first, then the
 other rows on screen. Rows show `·` until their totals are known.
 

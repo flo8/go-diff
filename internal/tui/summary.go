@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"path"
 	"sort"
 	"strings"
 
@@ -26,6 +27,7 @@ type fileList struct {
 	hidden     int             // files changed only in ignored ways
 	grouped    bool            // go, tests, other: see groups.go
 	groupFiles [groupCount]int // number of visible files in each group
+	pkgWidth   int             // width of the Package column
 	selected   int
 	top        int // first visible row when the list scrolls
 }
@@ -53,6 +55,8 @@ func (l *fileList) refresh(files []*review.File) {
 	for _, f := range l.visible {
 		l.groupFiles[groupOf(f.Change.Path())]++
 	}
+
+	l.pkgWidth = pkgColWidth(l.visible)
 
 	// Find the previously selected file again.
 	l.selected = 0
@@ -208,7 +212,7 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 		s.list.scroll(rows)
 	}
 
-	lines = append(lines, m.tableTitles(width, staging))
+	lines = append(lines, m.tableTitles(width, s.list.pkgWidth, staging))
 	lines = append(lines, m.rule(width))
 
 	for _, line := range s.list.bodyLines(rows) {
@@ -220,7 +224,7 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 			lines = append(lines, m.groupSeparator(g, s.list.groupFiles[g], width))
 			continue
 		}
-		lines = append(lines, m.fileRow(f, staging, line.file == s.list.selected, focused, width))
+		lines = append(lines, m.fileRow(f, staging, line.file == s.list.selected, focused, s.list.pkgWidth, width))
 	}
 
 	// An empty list says why.
@@ -242,13 +246,13 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 }
 
 // nameColWidth is what remains of the width for the file names.
-func nameColWidth(width int) int {
-	return max(width-2-4*numColWidth-detailsColWidth-2, 10)
+func nameColWidth(width, pkgWidth int) int {
+	return max(width-2-4*numColWidth-detailsColWidth-2-pkgWidth, 10)
 }
 
 // tableTitles draws the column titles; with staging, a narrow column
 // for the staging marks comes first.
-func (m *Model) tableTitles(width int, staging bool) string {
+func (m *Model) tableTitles(width, pkgWidth int, staging bool) string {
 	var b strings.Builder
 
 	b.WriteString("  ")
@@ -261,6 +265,7 @@ func (m *Model) tableTitles(width int, staging bool) string {
 	b.WriteString(padLeft("Funcs", numColWidth))
 	b.WriteString("  ")
 	b.WriteString(padRight("Details", detailsColWidth))
+	b.WriteString(padRight("Package", pkgWidth))
 	b.WriteString("Filename")
 
 	return m.pal.Style(m.pal.Muted, m.pal.Bg, true).Render(padTo(b.String(), width))
@@ -283,8 +288,8 @@ func (m *Model) stageMark(f *review.File) (string, color.Color) {
 }
 
 // fileRow draws one file of the table, after its staging mark when
-// staging is set.
-func (m *Model) fileRow(f *review.File, staging, selected, focused bool, width int) string {
+// staging is set. The Package column is pkgWidth wide.
+func (m *Model) fileRow(f *review.File, staging, selected, focused bool, pkgWidth, width int) string {
 	var highlight bool
 	var bg color.Color
 	var marker string
@@ -315,7 +320,8 @@ func (m *Model) fileRow(f *review.File, staging, selected, focused bool, width i
 	b.WriteString(m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(counts[2], numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Fg, bg, false).Render(padLeft(funcsText(f), numColWidth)))
 	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render("  " + padRight(details(f, highlight), detailsColWidth)))
-	b.WriteString(m.pal.Style(m.pal.Fg, bg, highlight).Render(displayName(f.Change, nameColWidth(width))))
+	b.WriteString(m.pal.Style(m.pal.Muted, bg, false).Render(padRight(cutLeft(packageDir(f.Change.Path()), pkgWidth-2), pkgWidth)))
+	b.WriteString(m.pal.Style(m.pal.Fg, bg, highlight).Render(displayName(f.Change, nameColWidth(width, pkgWidth))))
 
 	return m.padLine(b.String(), bg, width)
 }
@@ -340,7 +346,7 @@ func (m *Model) totalsRow(s *changeSet, width int) string {
 
 	total = s.totals()
 
-	label = "Total: " + fileCount(len(s.list.visible))
+	label = "Total: " + fileCount(len(s.list.visible)) + ", " + packageCount(s.packageTotal())
 	if s.list.hidden > 0 {
 		label += fmt.Sprintf(" (%d hidden: only ignored changes)", s.list.hidden)
 	}
@@ -411,20 +417,22 @@ func statusText(s git.Status) string {
 	return ""
 }
 
-// displayName shows "old → new" for renames, cut from the left to fit
-// so that the file name stays visible.
+// displayName shows the file name without its directory, which is in
+// the Package column. Renames show "old → new"; the old name keeps its
+// directory when the file moved to another one. It is cut from the left
+// to fit, so that the file name stays visible.
 func displayName(c git.Change, width int) string {
 	var name string
-	var runes []rune
+	var old string
 
-	name = c.Path()
+	name = path.Base(c.Path())
 	if (c.Status == git.Renamed || c.Status == git.Copied) && c.OldPath != c.NewPath {
-		name = c.OldPath + " → " + c.NewPath
+		old = path.Base(c.OldPath)
+		if packageDir(c.OldPath) != packageDir(c.NewPath) {
+			old = c.OldPath
+		}
+		name = old + " → " + name
 	}
 
-	runes = []rune(name)
-	if len(runes) > width-1 {
-		return "…" + string(runes[len(runes)-(width-2):])
-	}
-	return name
+	return cutLeft(name, width-1)
 }
