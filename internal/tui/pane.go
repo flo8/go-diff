@@ -41,11 +41,12 @@ func (s *changeSet) recompute(f semantic.Filters) {
 	s.list.refresh(s.files)
 }
 
-// totals sums the counts of the files shown in the table.
+// totals sums the counts of the meaningful files, whether or not the
+// table rows are filtered to one package.
 func (s *changeSet) totals() diff.Counts {
 	var total diff.Counts
 
-	for _, f := range s.list.visible {
+	for _, f := range s.list.meaningful {
 		total.Removed += f.Counts.Removed
 		total.Added += f.Counts.Added
 		total.Modified += f.Counts.Modified
@@ -54,11 +55,11 @@ func (s *changeSet) totals() diff.Counts {
 	return total
 }
 
-// funcTotal sums the changed functions of the files shown in the table.
+// funcTotal sums the changed functions of the meaningful files.
 func (s *changeSet) funcTotal() int {
 	var total int
 
-	for _, f := range s.list.visible {
+	for _, f := range s.list.meaningful {
 		total += f.Funcs
 	}
 

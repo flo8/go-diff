@@ -19,14 +19,14 @@ func packageDir(p string) string {
 	return path.Dir(p)
 }
 
-// packageTotal counts the Go packages of the files shown in the table:
-// the directories holding a changed .go file, tests included.
+// packageTotal counts the Go packages of the meaningful files: the
+// directories holding a changed .go file, tests included.
 func (s *changeSet) packageTotal() int {
 	var dirs map[string]bool
 	var p string
 
 	dirs = map[string]bool{}
-	for _, f := range s.list.visible {
+	for _, f := range s.list.meaningful {
 		p = f.Change.Path()
 		if groupOf(p) != groupOther {
 			dirs[packageDir(p)] = true

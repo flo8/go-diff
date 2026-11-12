@@ -33,6 +33,7 @@ var helpSections = []struct {
 	{"Mouse", [][2]string{
 		{"click", "select a file or a history entry"},
 		{"double-click", "open a file"},
+		{"click a package", "show only its files; click again or Esc for all"},
 		{"wheel", "scroll the panel under the mouse, or the diff"},
 		{"Shift+drag", "select text (in most terminals)"},
 	}},
@@ -45,6 +46,7 @@ var helpSections = []struct {
 		{"↑ ↓  j k", "select a file"},
 		{"PgUp PgDn  g G", "page up / down, first / last"},
 		{"Enter", "open the selected file"},
+		{"Esc", "show all packages after clicking one"},
 		{"o", "group by go files, tests and other files (default) or not"},
 	}},
 	{"Diff viewer", [][2]string{

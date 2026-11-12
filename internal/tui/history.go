@@ -123,7 +123,7 @@ func (m *Model) selectEntry(i int) tea.Cmd {
 	m.files = pane{set: set}
 	if set != nil {
 		set.recompute(m.filters)
-		m.applyGrouping(set)
+		m.applyView(set)
 		return m.nextLoad()
 	}
 
@@ -215,7 +215,7 @@ func (m *Model) finishLoad(msg commitLoaded) tea.Cmd {
 
 	commit, isCommit = m.hist.selectedCommit()
 	if isCommit && commit.Hash == msg.hash {
-		m.applyGrouping(msg.set)
+		m.applyView(msg.set)
 		m.files.set = msg.set
 	}
 
@@ -386,7 +386,7 @@ func (m *Model) entryCounts(s *changeSet, bg color.Color) string {
 	}
 
 	total = s.totals()
-	return m.pal.Style(m.pal.Muted, bg, false).Render(padLeft(fileCount(len(s.list.visible)), filesColWidth)) +
+	return m.pal.Style(m.pal.Muted, bg, false).Render(padLeft(fileCount(len(s.list.meaningful)), filesColWidth)) +
 		m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(fmt.Sprint(total.Removed), countColWidth)) +
 		m.pal.Style(m.pal.AddedFg, bg, false).Render(padLeft(fmt.Sprint(total.Added), countColWidth)) +
 		m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(fmt.Sprint(total.Modified), countColWidth)) +
@@ -396,7 +396,7 @@ func (m *Model) entryCounts(s *changeSet, bg color.Color) string {
 
 // currentSubject describes the "current" entry.
 func (m *Model) currentSubject() string {
-	if len(m.current.list.visible) == 0 {
+	if len(m.current.list.meaningful) == 0 {
 		return m.current.rangeName + "  (no changes)"
 	}
 	return m.current.rangeName

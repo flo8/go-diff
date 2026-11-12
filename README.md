@@ -88,7 +88,9 @@ once. Lines outside functions (types, vars, imports) do not count.
 The *Package* column shows each file's directory (`.` at the top of the
 repository), and *Filename* only its base name. The totals count the
 changed packages: the directories with a changed `.go` file, tests
-included.
+included. Click a package to show only its files; the filter stays on
+while you move through the history. Click it again or press `Esc` to
+show all files. The totals and history rows always count every file.
 
 Word highlighting splits lines into identifiers, numbers, whitespace and
 single punctuation characters, so `timeout := 500 * time.Millisecond` →

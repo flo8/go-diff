@@ -52,7 +52,8 @@ type Model struct {
 	files       pane // the selected history entry's files and open viewer
 	focus       focusArea
 	showHistory bool
-	groupByKind bool // file tables group go, tests and other files
+	groupByKind bool   // file tables group go, tests and other files
+	pkgFilter   string // file tables show only this directory; "" for all
 	help        bool
 	lastClick   fileClick // for double-clicks, see mouse.go
 
@@ -95,7 +96,7 @@ func New(opt Options) *Model {
 
 	// "current" is selected first; commits load when selected.
 	m.current = newChangeSet(opt.Files, opt.Range, opt.Filters)
-	m.applyGrouping(m.current)
+	m.applyView(m.current)
 	m.files = pane{set: m.current}
 	m.hist.cache = map[string]*changeSet{}
 	m.hist.loadErr = map[string]error{}
@@ -380,11 +381,20 @@ func (m *Model) tableHeight() int {
 
 // selectedTitle names the selected history entry in the header.
 func (m *Model) selectedTitle() string {
-	commit, isCommit := m.hist.selectedCommit()
-	if !isCommit {
-		return m.current.rangeName
+	var title string
+	var commit git.Commit
+	var isCommit bool
+
+	commit, isCommit = m.hist.selectedCommit()
+	title = m.current.rangeName
+	if isCommit {
+		title = commit.Short + " " + commit.Subject
 	}
-	return commit.Short + " " + commit.Subject
+
+	if m.pkgFilter != "" {
+		title += "  (package " + m.pkgFilter + ")"
+	}
+	return title
 }
 
 // filesPanel draws the selected entry's file table in height lines, or
@@ -449,6 +459,9 @@ func (m *Model) mainFooter() string {
 	}
 
 	hints = [][2]string{{"↑↓", "select file"}, {"⏎", "open"}}
+	if m.pkgFilter != "" {
+		hints = append(hints, [2]string{"esc", "all packages"})
+	}
 	if m.stagingShown() {
 		hints = append(hints, [2]string{"space/a", "stage"})
 	}
@@ -467,15 +480,31 @@ func onOff(on bool) string {
 	return "off"
 }
 
-// applyGrouping groups a file table the way all of them are, when it
-// is shown. Each loaded commit keeps its own table, so it may have been
-// sorted before o was pressed.
-func (m *Model) applyGrouping(s *changeSet) {
-	if s.list.grouped == m.groupByKind {
+// applyView groups and filters a file table the way all of them are,
+// when it is shown. Each loaded commit keeps its own table, so it may
+// have been drawn before o was pressed or a package was clicked.
+func (m *Model) applyView(s *changeSet) {
+	if s.list.grouped == m.groupByKind && s.list.pkg == m.pkgFilter {
 		return
 	}
 	s.list.grouped = m.groupByKind
+	s.list.pkg = m.pkgFilter
 	s.list.refresh(s.files)
+}
+
+// setPackageFilter shows only the files of directory dir in the file
+// tables, or all files when dir is "".
+func (m *Model) setPackageFilter(dir string) {
+	m.pkgFilter = dir
+	if m.files.set != nil {
+		m.applyView(m.files.set)
+	}
+}
+
+// showsStaging reports whether a file table has the column of staging
+// marks: only "current", and only when it can be staged.
+func (m *Model) showsStaging(s *changeSet) bool {
+	return s == m.current && m.canStage && m.repo != nil
 }
 
 // headerLine shows the app name, the branch and a title on the left and

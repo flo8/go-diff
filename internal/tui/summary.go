@@ -23,9 +23,11 @@ const (
 
 // fileList is the state of a file table.
 type fileList struct {
-	visible    []*review.File  // files with meaningful changes, sorted
+	meaningful []*review.File  // files with meaningful changes, sorted; totals count these
+	visible    []*review.File  // the rows: meaningful files, of pkg only when set
 	hidden     int             // files changed only in ignored ways
 	grouped    bool            // go, tests, other: see groups.go
+	pkg        string          // directory the rows are filtered to, or ""
 	groupFiles [groupCount]int // number of visible files in each group
 	pkgWidth   int             // width of the Package column
 	selected   int
@@ -41,14 +43,22 @@ func (l *fileList) refresh(files []*review.File) {
 		keep = l.visible[l.selected]
 	}
 
-	l.visible = l.visible[:0]
+	l.meaningful = l.meaningful[:0]
 	for _, f := range files {
 		if f.Meaningful() {
+			l.meaningful = append(l.meaningful, f)
+		}
+	}
+	l.hidden = len(files) - len(l.meaningful)
+	l.sort()
+
+	// The rows: every meaningful file, or those of one package.
+	l.visible = l.visible[:0]
+	for _, f := range l.meaningful {
+		if l.pkg == "" || packageDir(f.Change.Path()) == l.pkg {
 			l.visible = append(l.visible, f)
 		}
 	}
-	l.hidden = len(files) - len(l.visible)
-	l.sort()
 
 	// Count the files of each group for the separator lines.
 	l.groupFiles = [groupCount]int{}
@@ -56,7 +66,7 @@ func (l *fileList) refresh(files []*review.File) {
 		l.groupFiles[groupOf(f.Change.Path())]++
 	}
 
-	l.pkgWidth = pkgColWidth(l.visible)
+	l.pkgWidth = pkgColWidth(l.meaningful)
 
 	// Find the previously selected file again.
 	l.selected = 0
@@ -70,7 +80,7 @@ func (l *fileList) refresh(files []*review.File) {
 // sort orders by number of changes (most first), then by path; when
 // grouped, by group first.
 func (l *fileList) sort() {
-	sort.SliceStable(l.visible, l.less)
+	sort.SliceStable(l.meaningful, l.less)
 }
 
 func (l *fileList) less(i, j int) bool {
@@ -79,8 +89,8 @@ func (l *fileList) less(i, j int) bool {
 
 	// Groups come first, in their order.
 	if l.grouped {
-		gi = groupOf(l.visible[i].Change.Path())
-		gj = groupOf(l.visible[j].Change.Path())
+		gi = groupOf(l.meaningful[i].Change.Path())
+		gj = groupOf(l.meaningful[j].Change.Path())
 		if gi != gj {
 			return gi < gj
 		}
@@ -90,12 +100,12 @@ func (l *fileList) less(i, j int) bool {
 }
 
 func (l *fileList) byPath(i, j int) bool {
-	return l.visible[i].Change.Path() < l.visible[j].Change.Path()
+	return l.meaningful[i].Change.Path() < l.meaningful[j].Change.Path()
 }
 
 func (l *fileList) byChanges(i, j int) bool {
-	a := l.visible[i].Counts.Total()
-	b := l.visible[j].Counts.Total()
+	a := l.meaningful[i].Counts.Total()
+	b := l.meaningful[j].Counts.Total()
 	if a != b {
 		return a > b
 	}
@@ -176,9 +186,11 @@ func (m *Model) fileListKey(p *pane, key string) {
 		l.move(len(l.visible))
 	case "o":
 		m.groupByKind = !m.groupByKind
-		m.applyGrouping(p.set)
+		m.applyView(p.set)
 	case "enter", "l", "right":
 		m.openSelected(p)
+	case "esc":
+		m.setPackageFilter("")
 	}
 }
 
@@ -201,7 +213,7 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 	var f *review.File
 	var g fileGroup
 
-	staging = s == m.current && m.canStage && m.repo != nil
+	staging = m.showsStaging(s)
 	rows = tableRows(height, withTotals)
 
 	// Separators take rows too: keep room for one per group so the
@@ -228,8 +240,11 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 	}
 
 	// An empty list says why.
-	if len(s.list.visible) == 0 {
+	switch {
+	case len(s.list.meaningful) == 0:
 		lines = append(lines, m.pal.Paint("  No meaningful changes.", m.pal.Muted))
+	case len(s.list.visible) == 0:
+		lines = append(lines, m.pal.Paint("  No changes in "+s.list.pkg+". Esc shows all packages.", m.pal.Muted))
 	}
 
 	// Fill the space; the totals, if any, stay at the bottom.
@@ -338,7 +353,8 @@ func (m *Model) padLine(line string, bg color.Color, width int) string {
 	return line + m.pal.Style(nil, bg, false).Render(strings.Repeat(" ", width-w))
 }
 
-// totalsRow sums the counts of the visible files.
+// totalsRow sums the counts of all meaningful files, even when the rows
+// show one package only.
 func (m *Model) totalsRow(s *changeSet, width int) string {
 	var total diff.Counts
 	var label string
@@ -346,7 +362,7 @@ func (m *Model) totalsRow(s *changeSet, width int) string {
 
 	total = s.totals()
 
-	label = "Total: " + fileCount(len(s.list.visible)) + ", " + packageCount(s.packageTotal())
+	label = "Total: " + fileCount(len(s.list.meaningful)) + ", " + packageCount(s.packageTotal())
 	if s.list.hidden > 0 {
 		label += fmt.Sprintf(" (%d hidden: only ignored changes)", s.list.hidden)
 	}

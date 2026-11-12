@@ -30,11 +30,16 @@ func (m *Model) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 		return nil
 	}
 
-	// A file of the table above: select it, or open it on a double-click.
+	// A file of the table above: its package filters the table, a
+	// click elsewhere on the row selects it, a double-click opens it.
 	i, ok = m.fileAt(msg.Y)
 	if ok {
 		m.files.set.list.selected = i
 		m.focus = focusFiles
+		if m.overPackage(msg.X) {
+			m.clickPackage(i)
+			return nil
+		}
 		m.clickFile(i)
 		return nil
 	}
@@ -63,6 +68,35 @@ func (m *Model) clickFile(i int) {
 		m.lastClick = fileClick{}
 		m.openSelected(&m.files)
 	}
+}
+
+// clickPackage shows only the files of the package of file i, or all
+// files again when the table already shows that package only. It is not
+// half of a double-click.
+func (m *Model) clickPackage(i int) {
+	var dir string
+
+	m.lastClick = fileClick{}
+	dir = packageDir(m.files.set.list.visible[i].Change.Path())
+	if dir == m.pkgFilter {
+		dir = ""
+	}
+
+	m.setPackageFilter(dir)
+}
+
+// overPackage reports whether screen column x is on the Package column
+// of the shown file table, the two spaces after it excluded. It follows
+// fileRow: the marker, the staging mark, four counts and the details.
+func (m *Model) overPackage(x int) bool {
+	var start int
+
+	start = 2 + 4*numColWidth + 2 + detailsColWidth
+	if m.showsStaging(m.files.set) {
+		start += 2
+	}
+
+	return x >= start && x < start+m.files.set.list.pkgWidth-2
 }
 
 // mouseWheel scrolls what is under the mouse: the diff viewer, the
