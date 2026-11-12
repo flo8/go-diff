@@ -78,7 +78,7 @@ Counting: inside each run of changed lines, the k-th removed line is
 paired with the k-th added line and counted as one *modified* line. The
 rest are *removed* or *added*.
 
-The `current` table also has a *Funcs* column: for each Go file, the
+The file table also has a *Funcs* column: for each Go file, the
 number of top-level functions and methods with at least one changed
 line. It uses the same filters, so a function that only got new
 comments, blank lines or spacing does not count. A modified line counts
