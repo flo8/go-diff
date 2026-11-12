@@ -30,6 +30,12 @@ var helpSections = []struct {
 		{"tab", "move between the file table and the history"},
 		{"L", "show / hide the history panel"},
 	}},
+	{"Mouse", [][2]string{
+		{"click", "select a file or a history entry"},
+		{"double-click", "open a file"},
+		{"wheel", "scroll the panel under the mouse, or the diff"},
+		{"Shift+drag", "select text (in most terminals)"},
+	}},
 	{"History", [][2]string{
 		{"↑ ↓  j k", "select an entry; its files show in the table above"},
 		{"", "\"current\" is the comparison from the command line"},

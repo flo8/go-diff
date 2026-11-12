@@ -161,6 +161,10 @@ Press `?` in the app for the full list.
 | `t` | next theme | next theme |
 | `q` | quit | quit |
 
+The mouse works too: click a file or a history entry to select it,
+double-click a file to open it, and the wheel scrolls the panel under
+the mouse or the diff. Most terminals still select text with Shift+drag.
+
 ## Configuration
 
 Optional, in `~/.config/godiff/config.json`:

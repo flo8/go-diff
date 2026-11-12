@@ -113,6 +113,42 @@ func (l *fileList) scroll(height int) {
 	}
 }
 
+// tableLine is one line of a file table's body: the file at index file
+// of the visible list, or the separator above it when separator is set.
+type tableLine struct {
+	file      int
+	separator bool
+}
+
+// bodyLines lists what the body of the table shows from the top row, in
+// at most rows lines. fileTable draws them and mouse clicks look them up.
+func (l *fileList) bodyLines(rows int) []tableLine {
+	var lines []tableLine
+
+	for i := l.top; i < len(l.visible) && len(lines) < rows; i++ {
+		if l.grouped && l.startsGroup(i) {
+			lines = append(lines, tableLine{file: i, separator: true})
+		}
+		if len(lines) < rows {
+			lines = append(lines, tableLine{file: i})
+		}
+	}
+
+	return lines
+}
+
+// tableRows is the number of body rows of a file table drawn in height
+// lines: the titles and rule take two, and the totals two more when
+// withTotals is set.
+func tableRows(height int, withTotals bool) int {
+	var footer int
+
+	if withTotals {
+		footer = 2
+	}
+	return max(height-tableChrome-footer, 1)
+}
+
 // fileListKey handles the keys of a focused file table.
 func (m *Model) fileListKey(p *pane, key string) {
 	var l *fileList
@@ -156,18 +192,13 @@ func (m *Model) openSelected(p *pane) {
 // focus the selected row is marked but not highlighted.
 func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals bool) []string {
 	var lines []string
-	var footer int
 	var rows int
 	var staging bool
 	var f *review.File
 	var g fileGroup
 
 	staging = s == m.current && m.canStage && m.repo != nil
-	footer = 0
-	if withTotals {
-		footer = 2
-	}
-	rows = max(height-2-footer, 1)
+	rows = tableRows(height, withTotals)
 
 	// Separators take rows too: keep room for one per group so the
 	// selected file always stays on screen.
@@ -180,17 +211,16 @@ func (m *Model) fileTable(s *changeSet, width, height int, focused, withTotals b
 	lines = append(lines, m.tableTitles(width, staging))
 	lines = append(lines, m.rule(width))
 
-	for i := s.list.top; i < len(s.list.visible) && len(lines) < rows+2; i++ {
-		f = s.list.visible[i]
+	for _, line := range s.list.bodyLines(rows) {
+		f = s.list.visible[line.file]
 
 		// A grouped table names each group above its first file.
-		if s.list.grouped && s.list.startsGroup(i) {
+		if line.separator {
 			g = groupOf(f.Change.Path())
 			lines = append(lines, m.groupSeparator(g, s.list.groupFiles[g], width))
+			continue
 		}
-		if len(lines) < rows+2 {
-			lines = append(lines, m.fileRow(f, staging, i == s.list.selected, focused, width))
-		}
+		lines = append(lines, m.fileRow(f, staging, line.file == s.list.selected, focused, width))
 	}
 
 	// An empty list says why.

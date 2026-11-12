@@ -54,6 +54,7 @@ type Model struct {
 	showHistory bool
 	groupByKind bool // file tables group go, tests and other files
 	help        bool
+	lastClick   fileClick // for double-clicks, see mouse.go
 
 	// Changing the repository: see gitkeys.go and job.go.
 	rangeOpts    git.Options
@@ -161,6 +162,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.input != nil {
 			m.input.insert(msg.Content)
 		}
+	case tea.MouseClickMsg:
+		return m, m.mouseClick(msg)
+	case tea.MouseWheelMsg:
+		return m, m.mouseWheel(msg)
 	case tea.KeyPressMsg:
 		if m.input != nil {
 			return m, m.inputKey(msg.String(), msg.Text)
@@ -328,6 +333,10 @@ func (m *Model) View() tea.View {
 	v.AltScreen = true
 	v.WindowTitle = "godiff"
 
+	// Clicks and the wheel come as messages. Most terminals still
+	// select text with Shift+drag.
+	v.MouseMode = tea.MouseModeCellMotion
+
 	// The theme background becomes the terminal background, so every
 	// unstyled cell gets it too.
 	v.BackgroundColor = m.pal.Bg
@@ -339,19 +348,13 @@ func (m *Model) View() tea.View {
 // mainView draws the header, the file table, the history panel (when
 // shown) and the footer.
 func (m *Model) mainView() string {
-	var tableHeight int
 	var detail []string
 	var lines []string
 
-	// An error's output takes room from the file table.
 	detail = m.resultDetail()
-	tableHeight = m.height - 2 - len(detail)
-	if m.showHistory {
-		tableHeight -= m.historyHeight()
-	}
 
 	lines = append(lines, m.headerLine(m.selectedTitle()))
-	lines = append(lines, m.filesPanel(max(tableHeight, 1))...)
+	lines = append(lines, m.filesPanel(m.tableHeight())...)
 	if m.showHistory {
 		lines = append(lines, m.historyPanel(m.historyHeight())...)
 	}
@@ -359,6 +362,20 @@ func (m *Model) mainView() string {
 	lines = append(lines, m.mainFooter())
 
 	return strings.Join(lines, "\n")
+}
+
+// tableHeight is the number of rows of the file table on the main
+// screen: what the header, the footer, an error's output and the
+// history panel leave. Mouse clicks use it to find the history rows.
+func (m *Model) tableHeight() int {
+	var height int
+
+	height = m.height - 2 - len(m.resultDetail())
+	if m.showHistory {
+		height -= m.historyHeight()
+	}
+
+	return max(height, 1)
 }
 
 // selectedTitle names the selected history entry in the header.
