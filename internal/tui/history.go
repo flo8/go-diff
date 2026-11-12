@@ -25,7 +25,7 @@ const (
 	hashColWidth  = 9
 	dateColWidth  = 15
 	authColWidth  = 14
-	countColWidth = 6  // removed, added and modified totals
+	countColWidth = 6  // removed, added, modified and funcs totals
 	filesColWidth = 10 // "12 files"
 )
 
@@ -374,22 +374,23 @@ func (m *Model) entrySet(i int) *changeSet {
 	return m.hist.cache[m.hist.commits[i-1].Hash]
 }
 
-// entryCounts draws an entry's number of files and its removed, added
-// and modified totals, colored like the file table, or dots while they
-// are not known yet.
+// entryCounts draws an entry's number of files and its removed, added,
+// modified and changed functions totals, colored like the file table,
+// or dots while they are not known yet.
 func (m *Model) entryCounts(s *changeSet, bg color.Color) string {
 	var total diff.Counts
 
 	// Not loaded yet, or computed with other filters.
 	if s == nil || s.filters != m.filters {
-		return m.pal.Style(m.pal.Muted, bg, false).Render(padLeft("·", filesColWidth) + strings.Repeat(padLeft("·", countColWidth), 3))
+		return m.pal.Style(m.pal.Muted, bg, false).Render(padLeft("·", filesColWidth) + strings.Repeat(padLeft("·", countColWidth), 4))
 	}
 
 	total = s.totals()
 	return m.pal.Style(m.pal.Muted, bg, false).Render(padLeft(fileCount(len(s.list.visible)), filesColWidth)) +
 		m.pal.Style(m.pal.RemovedFg, bg, false).Render(padLeft(fmt.Sprint(total.Removed), countColWidth)) +
 		m.pal.Style(m.pal.AddedFg, bg, false).Render(padLeft(fmt.Sprint(total.Added), countColWidth)) +
-		m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(fmt.Sprint(total.Modified), countColWidth))
+		m.pal.Style(m.pal.ModifiedFg, bg, false).Render(padLeft(fmt.Sprint(total.Modified), countColWidth)) +
+		m.pal.Style(m.pal.Fg, bg, false).Render(padLeft(fmt.Sprint(s.funcTotal()), countColWidth))
 }
 
 // currentSubject describes the "current" entry.

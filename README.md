@@ -102,8 +102,8 @@ shows its files, compared with its parent, in the table above.
 | `tab` | move between the file table and the history |
 | `L` | show / hide the history panel |
 
-Each row shows the commit's number of files and its removed, added and
-modified totals, with the same filters as the file table. Commits load
+Each row shows the commit's number of files and its removed, added,
+modified and Funcs totals, with the same filters as the file table. Commits load
 in the background, one at a time: the selected commit first, then the
 other rows on screen. Rows show `·` until their totals are known.
 
